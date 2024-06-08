@@ -3,19 +3,106 @@
 
 openapi: 3.0.3
 info:
-    title: Greeter API
-    description: The greeting service definition.
+    title: Cert API
     version: 0.0.1
 paths:
-    /helloworld/{name}:
+    /v1/cert/casigncsr:
+        post:
+            tags:
+                - Cert
+            operationId: Cert_CASignCSR
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/goca.v1.CASignCSRRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/goca.v1.CASignCSRResponse'
+    /v1/cert/csr:
+        post:
+            tags:
+                - Cert
+            operationId: Cert_CSR
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/goca.v1.CSRRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/goca.v1.CSRResponse'
+    /v1/cert/genkey:
+        post:
+            tags:
+                - Cert
+            operationId: Cert_GenKey
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/goca.v1.GenKeyRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/goca.v1.GenKeyResponse'
+    /v1/cert/pkcs12:
+        post:
+            tags:
+                - Cert
+            operationId: Cert_PKCS12
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/goca.v1.PKCS12Request'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/goca.v1.PKCS12Response'
+    /v1/cert/revokecert:
+        post:
+            tags:
+                - Cert
+            operationId: Cert_RevokeCert
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/goca.v1.RevokeCertRequest'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/goca.v1.RevokeCertResponse'
+    /v1/cert/{serialNumber}:
         get:
             tags:
-                - Greeter
-                - subgroup
-            description: Sends a greeting
-            operationId: Greeter_SayHello
+                - Cert
+            operationId: Cert_GetCert
             parameters:
-                - name: name
+                - name: serialNumber
                   in: path
                   required: true
                   schema:
@@ -26,14 +113,127 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/helloworld.v1.HelloReply'
+                                $ref: '#/components/schemas/goca.v1.CertResponse'
 components:
     schemas:
-        helloworld.v1.HelloReply:
+        goca.v1.CASignCSRRequest:
             type: object
             properties:
-                message:
+                caCommon:
                     type: string
-            description: The response message containing the greetings
+                csr:
+                    type: string
+                days:
+                    type: integer
+                    format: int32
+        goca.v1.CASignCSRResponse:
+            type: object
+            properties:
+                caCommon:
+                    type: string
+                serialNumber:
+                    type: string
+                cert:
+                    type: string
+        goca.v1.CSRRequest:
+            type: object
+            properties:
+                common:
+                    type: string
+                country:
+                    type: string
+                province:
+                    type: string
+                locality:
+                    type: string
+                organization:
+                    type: string
+                organizationUnit:
+                    type: string
+                email:
+                    type: string
+                dns:
+                    type: array
+                    items:
+                        type: string
+                ip:
+                    type: array
+                    items:
+                        type: string
+                password:
+                    type: string
+                caCommon:
+                    type: string
+            description: 生成CSR请求需要的参
+        goca.v1.CSRResponse:
+            type: object
+            properties:
+                csr:
+                    type: string
+                caCommon:
+                    type: string
+        goca.v1.CertResponse:
+            type: object
+            properties:
+                cert:
+                    type: string
+        goca.v1.GenKeyRequest:
+            type: object
+            properties:
+                keyType:
+                    type: integer
+                    format: enum
+                keySize:
+                    type: integer
+                    format: int32
+                password:
+                    type: string
+            description: 生成公私钥请求
+        goca.v1.GenKeyResponse:
+            type: object
+            properties:
+                keyType:
+                    type: integer
+                    format: enum
+                publicKey:
+                    type: string
+                privateKey:
+                    type: string
+            description: 生成公私钥响应
+        goca.v1.PKCS12Request:
+            type: object
+            properties:
+                caCommon:
+                    type: string
+                genKeyRequest:
+                    $ref: '#/components/schemas/goca.v1.GenKeyRequest'
+                csrRequest:
+                    $ref: '#/components/schemas/goca.v1.CSRRequest'
+                days:
+                    type: integer
+                    format: int32
+        goca.v1.PKCS12Response:
+            type: object
+            properties:
+                pkcs12:
+                    type: string
+        goca.v1.RevokeCertRequest:
+            type: object
+            properties:
+                caCommon:
+                    type: string
+                serialNumber:
+                    type: string
+                reason:
+                    type: string
+                reasonText:
+                    type: string
+        goca.v1.RevokeCertResponse:
+            type: object
+            properties:
+                caCommon:
+                    type: string
+                crl:
+                    type: string
 tags:
-    - name: Greeter
+    - name: Cert

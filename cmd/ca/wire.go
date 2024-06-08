@@ -6,11 +6,11 @@
 package main
 
 import (
-	"ca/internal/biz"
-	"ca/internal/conf"
-	"ca/internal/data"
-	"ca/internal/server"
-	"ca/internal/service"
+	"github.com/mengbin92/goca/internal/biz"
+	"github.com/mengbin92/goca/internal/conf"
+	"github.com/mengbin92/goca/internal/data"
+	"github.com/mengbin92/goca/internal/server"
+	"github.com/mengbin92/goca/internal/service"
 
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"

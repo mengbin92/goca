@@ -1,7 +1,7 @@
 package server
 
 import (
-	v1 "github.com/mengbin92/goca/api/helloworld/v1"
+	v1 "github.com/mengbin92/goca/api/goca/v1"
 	"github.com/mengbin92/goca/internal/conf"
 	"github.com/mengbin92/goca/internal/service"
 
@@ -11,7 +11,7 @@ import (
 )
 
 // NewGRPCServer new a gRPC server.
-func NewGRPCServer(c *conf.Server, greeter *service.GreeterService, logger log.Logger) *grpc.Server {
+func NewGRPCServer(c *conf.Server, certer *service.CertService, logger log.Logger) *grpc.Server {
 	var opts = []grpc.ServerOption{
 		grpc.Middleware(
 			recovery.Recovery(),
@@ -27,6 +27,6 @@ func NewGRPCServer(c *conf.Server, greeter *service.GreeterService, logger log.L
 		opts = append(opts, grpc.Timeout(c.Grpc.Timeout.AsDuration()))
 	}
 	srv := grpc.NewServer(opts...)
-	v1.RegisterGreeterServer(srv, greeter)
+	v1.RegisterCertServer(srv, certer)
 	return srv
 }

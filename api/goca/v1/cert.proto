@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package goca.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/mengbin92/goca/api/goca/v1;v1";
+
+// 公私钥算法类型
+enum KeyType {
+  RSA = 0;
+  ECDSA = 1;
+}
+
+// 生成公私钥请求
+message GenKeyRequest {
+  KeyType key_type = 1;
+  int32 key_size = 2;
+  string password = 3;
+}
+
+// 生成公私钥响应
+message GenKeyResponse {
+  KeyType key_type = 1;
+  string public_key = 2;
+  string private_key = 3;
+}
+
+// 生成CSR请求需要的参
+message CSRRequest {
+  string common = 1;
+  string country = 2;
+  string province = 3;
+  string locality = 4;
+  string organization = 5;
+  string organization_unit = 6;
+  string email = 7;
+  repeated string dns = 8;
+  repeated string ip = 9;
+  string password = 10;
+  string ca_common = 11;
+}
+
+message CSRResponse {
+  string csr = 1;
+  string ca_common = 2;
+}
+
+message CASignCSRRequest {
+  string ca_common = 1;
+  string csr = 2;
+  int32 days = 3;
+}
+
+message CASignCSRResponse {
+  string ca_common = 1;
+  string serial_number = 2;
+  string cert = 3;
+}
+
+message RevokeCertRequest {
+  string ca_common = 1;
+  string serial_number = 2;
+  string reason = 3;
+  string reason_text = 4;
+}
+
+message RevokeCertResponse {
+  string ca_common = 1;
+  string crl = 2;
+}
+
+message CertRequest { string serial_number = 1; }
+message CertResponse { string cert = 1; }
+
+message PKCS12Request {
+  string ca_common = 1;
+  GenKeyRequest gen_key_request = 2;
+  CSRRequest csr_request = 3;
+  int32 days = 4;
+}
+
+message PKCS12Response { string pkcs12 = 1; }
+
+service Cert {
+  rpc GenKey(GenKeyRequest) returns (GenKeyResponse) {
+    option (google.api.http) = {
+      post : "/v1/cert/genkey",
+      body : "*"
+    };
+  }
+  rpc CSR(CSRRequest) returns (CSRResponse) {
+    option (google.api.http) = {
+      post : "/v1/cert/csr",
+      body : "*"
+
+    };
+  }
+  rpc GetCert(CertRequest) returns (CertResponse) {
+    option (google.api.http) = {
+      get : "/v1/cert/{serial_number}"
+    };
+  }
+  rpc CASignCSR(CASignCSRRequest) returns (CASignCSRResponse) {
+    option (google.api.http) = {
+      post : "/v1/cert/casigncsr",
+      body : "*"
+    };
+  }
+  rpc RevokeCert(RevokeCertRequest) returns (RevokeCertResponse) {
+    option (google.api.http) = {
+      post : "/v1/cert/revokecert",
+      body : "*"
+    };
+  }
+  rpc PKCS12(PKCS12Request) returns (PKCS12Response) {
+    option (google.api.http) = {
+      post : "/v1/cert/pkcs12",
+      body : "*"
+    };
+  }
+}

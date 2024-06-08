@@ -4,11 +4,10 @@ import (
 	"github.com/mengbin92/goca/internal/conf"
 
 	"github.com/go-kratos/kratos/v2/log"
-	"github.com/google/wire"
 )
 
 // ProviderSet is data providers.
-var ProviderSet = wire.NewSet(NewData, NewGreeterRepo)
+// var ProviderSet = wire.NewSet(NewData, NewGreeterRepo)
 
 // Data .
 type Data struct {
