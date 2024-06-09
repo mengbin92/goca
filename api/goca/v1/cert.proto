@@ -17,13 +17,15 @@ message GenKeyRequest {
   KeyType key_type = 1;
   int32 key_size = 2;
   string password = 3;
+  string common = 4;
 }
 
 // 生成公私钥响应
 message GenKeyResponse {
   KeyType key_type = 1;
-  string public_key = 2;
-  string private_key = 3;
+  string common = 2;
+  string public_key = 3;
+  string private_key = 4;
 }
 
 // 生成CSR请求需要的参
@@ -70,7 +72,10 @@ message RevokeCertResponse {
   string crl = 2;
 }
 
-message CertRequest { string serial_number = 1; }
+message CertRequest {
+  string serial_number = 1;
+  string common = 2;
+}
 message CertResponse { string cert = 1; }
 
 message PKCS12Request {
@@ -98,7 +103,7 @@ service Cert {
   }
   rpc GetCert(CertRequest) returns (CertResponse) {
     option (google.api.http) = {
-      get : "/v1/cert/{serial_number}"
+      get : "/v1/cert/{common}"
     };
   }
   rpc CASignCSR(CASignCSRRequest) returns (CASignCSRResponse) {

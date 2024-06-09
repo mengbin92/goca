@@ -39,7 +39,7 @@ func RegisterCertHTTPServer(s *http.Server, srv CertHTTPServer) {
 	r := s.Route("/")
 	r.POST("/v1/cert/genkey", _Cert_GenKey0_HTTP_Handler(srv))
 	r.POST("/v1/cert/csr", _Cert_CSR0_HTTP_Handler(srv))
-	r.GET("/v1/cert/{serial_number}", _Cert_GetCert0_HTTP_Handler(srv))
+	r.GET("/v1/cert/{common}", _Cert_GetCert0_HTTP_Handler(srv))
 	r.POST("/v1/cert/casigncsr", _Cert_CASignCSR0_HTTP_Handler(srv))
 	r.POST("/v1/cert/revokecert", _Cert_RevokeCert0_HTTP_Handler(srv))
 	r.POST("/v1/cert/pkcs12", _Cert_PKCS120_HTTP_Handler(srv))
@@ -235,7 +235,7 @@ func (c *CertHTTPClientImpl) GenKey(ctx context.Context, in *GenKeyRequest, opts
 
 func (c *CertHTTPClientImpl) GetCert(ctx context.Context, in *CertRequest, opts ...http.CallOption) (*CertResponse, error) {
 	var out CertResponse
-	pattern := "/v1/cert/{serial_number}"
+	pattern := "/v1/cert/{common}"
 	path := binding.EncodeURL(pattern, in, true)
 	opts = append(opts, http.Operation(OperationCertGetCert))
 	opts = append(opts, http.PathTemplate(pattern))

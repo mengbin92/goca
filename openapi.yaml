@@ -96,15 +96,19 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/goca.v1.RevokeCertResponse'
-    /v1/cert/{serialNumber}:
+    /v1/cert/{common}:
         get:
             tags:
                 - Cert
             operationId: Cert_GetCert
             parameters:
-                - name: serialNumber
+                - name: common
                   in: path
                   required: true
+                  schema:
+                    type: string
+                - name: serialNumber
+                  in: query
                   schema:
                     type: string
             responses:
@@ -188,6 +192,8 @@ components:
                     format: int32
                 password:
                     type: string
+                common:
+                    type: string
             description: 生成公私钥请求
         goca.v1.GenKeyResponse:
             type: object
@@ -195,6 +201,8 @@ components:
                 keyType:
                     type: integer
                     format: enum
+                common:
+                    type: string
                 publicKey:
                     type: string
                 privateKey:

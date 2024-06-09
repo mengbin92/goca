@@ -8,6 +8,7 @@ import "google/protobuf/duration.proto";
 message Bootstrap {
   Server server = 1;
   Data data = 2;
+  RootCert root = 3;
 }
 
 message Server {
@@ -25,17 +26,56 @@ message Server {
   GRPC grpc = 2;
 }
 
+message Database {
+  // 数据库类型：mysql、sqlite3、postgres
+  string driver = 1;
+  string source = 2;
+  // 最大空闲连接数
+  int64 max_idle_conn = 3;
+  // 最大连接数
+  int64 max_open_conn = 4;
+  // 连接空闲超时参数
+  google.protobuf.Duration conn_max_lifetime = 5;
+}
+message Redis {
+  string network = 1;
+  string addr = 2;
+  string password = 3;
+  int32 db = 4;
+  google.protobuf.Duration read_timeout = 5;
+  google.protobuf.Duration write_timeout = 6;
+  google.protobuf.Duration dial_timeout = 7;
+}
+
 message Data {
-  message Database {
-    string driver = 1;
-    string source = 2;
-  }
-  message Redis {
-    string network = 1;
-    string addr = 2;
-    google.protobuf.Duration read_timeout = 3;
-    google.protobuf.Duration write_timeout = 4;
-  }
   Database database = 1;
   Redis redis = 2;
+}
+
+// 自签根证书
+message RootCert {
+  string common = 1;
+  string country = 2;
+  string province = 3;
+  string locality = 4;
+  string organization = 5;
+  string organization_unit = 6;
+  string email = 7;
+  repeated string dns = 8;
+  repeated string ip = 9;
+  KeyPair key_pair = 10;
+}
+
+// 公私钥算法类型
+enum KeyType {
+  RSA = 0;
+  ECDSA = 1;
+}
+
+// 生成公私钥请求
+message KeyPair {
+  KeyType key_type = 1;
+  int32 key_size = 2;
+  string password = 3;
+  string common = 4;
 }

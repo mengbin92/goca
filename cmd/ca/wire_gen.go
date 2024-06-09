@@ -12,25 +12,31 @@ import (
 	"github.com/mengbin92/goca/internal/biz"
 	"github.com/mengbin92/goca/internal/conf"
 	"github.com/mengbin92/goca/internal/data"
-	"github.com/mengbin92/goca/internal/service"
 	"github.com/mengbin92/goca/internal/server"
+	"github.com/mengbin92/goca/internal/service"
+)
 
+import (
 	_ "go.uber.org/automaxprocs"
 )
 
 // Injectors from wire.go:
 
 // wireApp init kratos application.
-func wireApp(confServer *conf.Server, confData *conf.Data, logger log.Logger) (*kratos.App, func(), error) {
+func wireApp(confServer *conf.Server, confData *conf.Data, rootCert *conf.RootCert, logger log.Logger) (*kratos.App, func(), error) {
 	dataData, cleanup, err := data.NewData(confData, logger)
 	if err != nil {
 		return nil, nil, err
 	}
 	caRepo := data.NewCARepo(dataData, logger)
-	caUsecase := biz.NewCAUseCase(caRepo, logger)
-	caService := service.NewCertService(caUsecase,logger)
-	grpcServer := server.NewGRPCServer(confServer, caService, logger)
-	httpServer := server.NewHTTPServer(confServer, caService, logger)
+	caUseCase := biz.NewCAUseCase(caRepo, logger)
+	certService, err := service.NewCertService(caUseCase, rootCert, logger)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	grpcServer := server.NewGRPCServer(confServer, certService, logger)
+	httpServer := server.NewHTTPServer(confServer, certService, logger)
 	app := newApp(logger, grpcServer, httpServer)
 	return app, func() {
 		cleanup()
