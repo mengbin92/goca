@@ -36,8 +36,8 @@ func (r *caRepo) SavePrivateKey(ctx context.Context, common, privateKey string) 
 	return r.data.rdb.Set(ctx, fmt.Sprintf("private-%s", common), privateKey, 0).Err()
 }
 
-func (r *caRepo) SaveCert(ctx context.Context, serial, cert string) error {
-	return r.data.rdb.Set(ctx, fmt.Sprintf("cert-%s", serial), cert, 0).Err()
+func (r *caRepo) SaveCert(ctx context.Context, common, cert string) error {
+	return r.data.rdb.Set(ctx, fmt.Sprintf("cert-%s", common), cert, 0).Err()
 }
 
 func (r *caRepo) SaveParentKey(ctx context.Context, common, privateKey string) error {

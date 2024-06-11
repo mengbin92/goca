@@ -41,7 +41,8 @@ func RegisterCertHTTPServer(s *http.Server, srv CertHTTPServer) {
 	r.POST("/v1/cert/csr", _Cert_CSR0_HTTP_Handler(srv))
 	r.GET("/v1/cert/{common}", _Cert_GetCert0_HTTP_Handler(srv))
 	r.POST("/v1/cert/casigncsr", _Cert_CASignCSR0_HTTP_Handler(srv))
-	r.POST("/v1/cert/revokecert", _Cert_RevokeCert0_HTTP_Handler(srv))
+	r.GET("/v1/cert/revokecert", _Cert_RevokeCert0_HTTP_Handler(srv))
+	r.POST("/v1/cert/revokecert", _Cert_RevokeCert1_HTTP_Handler(srv))
 	r.POST("/v1/cert/pkcs12", _Cert_PKCS120_HTTP_Handler(srv))
 }
 
@@ -134,6 +135,25 @@ func _Cert_CASignCSR0_HTTP_Handler(srv CertHTTPServer) func(ctx http.Context) er
 }
 
 func _Cert_RevokeCert0_HTTP_Handler(srv CertHTTPServer) func(ctx http.Context) error {
+	return func(ctx http.Context) error {
+		var in RevokeCertRequest
+		if err := ctx.BindQuery(&in); err != nil {
+			return err
+		}
+		http.SetOperation(ctx, OperationCertRevokeCert)
+		h := ctx.Middleware(func(ctx context.Context, req interface{}) (interface{}, error) {
+			return srv.RevokeCert(ctx, req.(*RevokeCertRequest))
+		})
+		out, err := h(ctx, &in)
+		if err != nil {
+			return err
+		}
+		reply := out.(*RevokeCertResponse)
+		return ctx.Result(200, reply)
+	}
+}
+
+func _Cert_RevokeCert1_HTTP_Handler(srv CertHTTPServer) func(ctx http.Context) error {
 	return func(ctx http.Context) error {
 		var in RevokeCertRequest
 		if err := ctx.Bind(&in); err != nil {

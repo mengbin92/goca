@@ -14,6 +14,7 @@ import (
 	"github.com/mengbin92/goca/internal/conf"
 	"github.com/mengbin92/goca/internal/utils"
 	"github.com/pkg/errors"
+	"software.sslmate.com/src/go-pkcs12"
 )
 
 type CertService struct {
@@ -138,6 +139,9 @@ func (s *CertService) CASignCSR(ctx context.Context, req *pb.CASignCSRRequest) (
 		return nil, errors.Wrap(err, "ca sign csr error")
 	}
 
+	// save cert to local
+	s.repo.SaveCert(ctx, csr.Subject.CommonName, cert)
+
 	return &pb.CASignCSRResponse{
 		SerialNumber: serial.String(),
 		Cert:         cert,
@@ -205,6 +209,9 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	if err != nil {
 		return nil, errors.Wrap(err, "create crl failed")
 	}
+	if err := s.repo.SaveCRL(ctx, req.CaCommon, string(pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlBytes}))); err != nil {
+		return nil, errors.Wrap(err, "save crl error")
+	}
 
 	return &pb.RevokeCertResponse{
 		CaCommon: req.CaCommon,
@@ -212,5 +219,77 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	}, nil
 }
 func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PKCS12Response, error) {
-	return &pb.PKCS12Response{}, nil
+	// loca ca cert and private key
+	caCertStr, err := s.repo.GetCert(ctx, req.CaCommon)
+	if err != nil {
+		return nil, errors.Wrap(err, "get ca cert error")
+	}
+	caCert, err := utils.LoadCert(caCertStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse ca cert error")
+	}
+	caPrivateKeyStr, err := s.repo.GetPrivateKey(ctx, req.CaCommon)
+	if err != nil {
+		return nil, errors.Wrap(err, "get ca private key error")
+	}
+	caPrivateKey, err := utils.LoadPrivateKey(caPrivateKeyStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse ca private key error")
+	}
+
+	// new keys with request
+	var privateKeyStr string
+	if req.GenKeyRequest.KeyType == pb.KeyType_RSA {
+		privateKey, err := utils.GenRSAKey(int(req.GenKeyRequest.KeySize))
+		if err != nil {
+			return nil, errors.Wrap(err, "generate rsa key error")
+		}
+		privateKeyStr = utils.RSAPrivateKeyToPEM(privateKey)
+	} else if req.GenKeyRequest.KeyType == pb.KeyType_ECDSA {
+		privateKey, err := utils.GenECDSAKey()
+		if err != nil {
+			return nil, errors.Wrap(err, "generate ecdsa key error")
+		}
+		privateKeyStr = utils.ECDSAPrivateKeyToPEM(privateKey)
+	} else {
+		return nil, errors.Errorf("invalid key type: %d", req.GenKeyRequest.KeyType)
+	}
+	// save to local
+	s.repo.SavePrivateKey(ctx, req.CaCommon, privateKeyStr)
+
+	privateKey, err := utils.LoadPrivateKey(privateKeyStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse private key error")
+	}
+	// new csr
+	csrStr,err := utils.GenerateCSR(privateKeyStr, req.CsrRequest)
+	if err != nil {
+		return nil, errors.Wrap(err, "generate csr error")
+	}
+	csr, err := utils.LoadCSR(csrStr)
+	if err !=nil{
+		return nil, errors.Wrap(err, "load csr error")
+	}
+
+	certStr, _, err := utils.SignCert(caPrivateKey, csr, int(req.Days))
+	if err != nil {
+		return nil, errors.Wrap(err, "ca sign csr error")
+	}
+	// save to local
+	s.repo.SaveCert(ctx, req.CaCommon, certStr)
+
+	cert,err := utils.LoadCert(certStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "load cert error")
+	}
+
+	pkfDate,err := pkcs12.Encode(rand.Reader, privateKey, cert, []*x509.Certificate{caCert}, req.GenKeyRequest.Password)
+	if err != nil {
+		return nil, errors.Wrap(err, "encode pkcs12 error")
+	}
+
+
+	return &pb.PKCS12Response{
+		Pkcs12: string(pem.EncodeToMemory(&pem.Block{Type: "PKCS12", Bytes: pkfDate})),
+	}, nil
 }

@@ -115,8 +115,12 @@ service Cert {
   rpc RevokeCert(RevokeCertRequest) returns (RevokeCertResponse) {
     option (google.api.http) = {
       post : "/v1/cert/revokecert",
-      body : "*"
+      body : "*",
+      additional_bindings {
+        get :"/v1/cert/revokecert"
+      }
     };
+  
   }
   rpc PKCS12(PKCS12Request) returns (PKCS12Response) {
     option (google.api.http) = {
