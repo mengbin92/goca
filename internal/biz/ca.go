@@ -18,6 +18,10 @@ type CARepo interface {
 	// for CRL
 	GetCRL(context.Context, string) (string, error)
 	SaveCRL(context.Context, string, string) error
+
+	// root ca
+	GetRootCert(context.Context, string) (string, error)
+	SaveRootCert(context.Context, string, string) error
 }
 
 type CAUseCase struct {
@@ -58,4 +62,12 @@ func (ca *CAUseCase) GetCRL(ctx context.Context, common string) (string, error) 
 
 func (ca *CAUseCase) SaveCRL(ctx context.Context, common, crl string) error {
 	return ca.repo.SaveCRL(ctx, common, crl)
+}
+
+func (ca *CAUseCase) GetRootCert(ctx context.Context, common string) (string, error) {
+	return ca.repo.GetRootCert(ctx, common)
+}
+
+func (ca *CAUseCase) SaveRootCert(ctx context.Context, common, cert string) error {
+	return ca.repo.SaveRootCert(ctx, common, cert)
 }

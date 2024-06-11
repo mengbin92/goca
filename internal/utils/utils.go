@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -57,7 +58,7 @@ func ECDSAPrivateKeyToPEM(privateKey *ecdsa.PrivateKey) string {
 func StrToIP(ips []string) (netIPs []net.IP, err error) {
 	for _, ip := range ips {
 		netIP := net.ParseIP(ip)
-		if netIP != nil {
+		if netIP == nil {
 			return nil, errors.Errorf("invalid ip: %s", ip)
 		}
 		netIPs = append(netIPs, netIP)
@@ -212,11 +213,17 @@ func GenRSARootCert(privateKey *rsa.PrivateKey, config *conf.RootCert) (string, 
 		EmailAddresses:        []string{config.Email},
 		DNSNames:              config.Dns,
 		IPAddresses:           netIPs,
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCRLSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IsCA:                  true,
 		BasicConstraintsValid: true,
 	}
+	// 生成Subject Key Identifier
+	ski, err := generateSubjectKeyIdentifier(&privateKey.PublicKey)
+	if err != nil {
+		return "", "", errors.Wrap(err, "generate subject key identifier failed")
+	}
+	certTemp.SubjectKeyId = ski
 	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, &certTemp, &privateKey.PublicKey, privateKey)
 	if err != nil {
 		return "", "", errors.Wrap(err, "create cert failed")
@@ -269,9 +276,15 @@ func GenECDSARootCert(privateKey *ecdsa.PrivateKey, config *conf.RootCert) (stri
 		EmailAddresses: []string{config.Email},
 		DNSNames:       config.Dns,
 		IPAddresses:    netIPs,
-		KeyUsage:       x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage:       x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCRLSign,
 		ExtKeyUsage:    []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
+	// 生成Subject Key Identifier
+	ski, err := generateSubjectKeyIdentifier(&privateKey.PublicKey)
+	if err != nil {
+		panic(err)
+	}
+	certTemp.SubjectKeyId = ski
 	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, &certTemp, &privateKey.PublicKey, privateKey)
 	if err != nil {
 		return "", "", errors.Wrap(err, "create cert failed")
@@ -323,6 +336,12 @@ func SignCert(private any, csr *x509.CertificateRequest, day int) (string, *big.
 		NotAfter:       time.Now().Add(time.Duration(day) * time.Hour),
 		KeyUsage:       x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 	}
+	// 生成Subject Key Identifier
+	ski, err := generateSubjectKeyIdentifier(publicKey)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "generate subject key identifier failed")
+	}
+	certTemp.SubjectKeyId = ski
 	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, &certTemp, publicKey, private)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "create cert failed")
@@ -348,4 +367,15 @@ func LoadCRL(crlStr string) (*x509.RevocationList, error) {
 
 func Str2BigInt(str string) (*big.Int, bool) {
 	return new(big.Int).SetString(str, 10)
+}
+
+// generateSubjectKeyIdentifier 生成一个Subject Key Identifier
+func generateSubjectKeyIdentifier(pubKey any) ([]byte, error) {
+	// 通常SKI是公钥的SHA-1散列值
+	pubKeyASN1, err := x509.MarshalPKIXPublicKey(pubKey)
+	if err != nil {
+		return nil, err
+	}
+	ski := sha1.Sum(pubKeyASN1)
+	return ski[:], nil
 }

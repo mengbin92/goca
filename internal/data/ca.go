@@ -51,3 +51,11 @@ func (r *caRepo) GetCRL(ctx context.Context, common string) (string, error) {
 func (r *caRepo) SaveCRL(ctx context.Context, common, crl string) error {
 	return r.data.rdb.Set(ctx, fmt.Sprintf("crl-%s", common), crl, 0).Err()
 }
+
+func (r *caRepo) GetRootCert(ctx context.Context, common string) (string, error) {
+	return r.data.rdb.Get(ctx, fmt.Sprintf("root-%s", common)).Result()
+}
+
+func (r *caRepo) SaveRootCert(ctx context.Context, common, cert string) error {
+	return r.data.rdb.Set(ctx, fmt.Sprintf("root-%s", common), cert, 0).Err()
+}
