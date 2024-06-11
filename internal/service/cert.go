@@ -268,7 +268,7 @@ func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PK
 		return nil, errors.Errorf("invalid key type: %d", req.GenKeyRequest.KeyType)
 	}
 	// save to local
-	s.repo.SavePrivateKey(ctx, req.CaCommon, privateKeyStr)
+	s.repo.SavePrivateKey(ctx, req.GenKeyRequest.Common, privateKeyStr)
 
 	privateKey, err := utils.LoadPrivateKey(privateKeyStr)
 	if err != nil {
@@ -289,7 +289,7 @@ func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PK
 		return nil, errors.Wrap(err, "ca sign csr error")
 	}
 	// save to local
-	s.repo.SaveCert(ctx, req.CaCommon, certStr)
+	s.repo.SaveCert(ctx, req.GenKeyRequest.Common, certStr)
 
 	cert, err := utils.LoadCert(certStr)
 	if err != nil {
