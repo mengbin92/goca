@@ -13,3 +13,23 @@ data:
     addr: 127.0.0.1:6379
     read_timeout: 0.2s
     write_timeout: 0.2s
+
+root:
+  common: rootca
+  country: CN
+  province: BeiJing
+  locality: BeiJing
+  organization: rootca
+  organizational_unit: rootca
+  email: rootca@163.com
+  dns:
+    - rootca.com
+    - www.rootca.com
+  ip:
+    - 127.0.0.1
+    - 192.168.1.1
+  key_pair:
+    key_type: RSA
+    key_size: 2048
+    password: "1234567890"
+    common: rootca

@@ -116,9 +116,6 @@ service Cert {
     option (google.api.http) = {
       post : "/v1/cert/revokecert",
       body : "*",
-      additional_bindings {
-        get :"/v1/cert/revokecert"
-      }
     };
   
   }

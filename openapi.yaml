@@ -79,34 +79,6 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/goca.v1.PKCS12Response'
     /v1/cert/revokecert:
-        get:
-            tags:
-                - Cert
-            operationId: Cert_RevokeCert
-            parameters:
-                - name: caCommon
-                  in: query
-                  schema:
-                    type: string
-                - name: serialNumber
-                  in: query
-                  schema:
-                    type: string
-                - name: reason
-                  in: query
-                  schema:
-                    type: string
-                - name: reasonText
-                  in: query
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/goca.v1.RevokeCertResponse'
         post:
             tags:
                 - Cert
