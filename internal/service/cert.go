@@ -75,6 +75,10 @@ func NewCertService(cert *biz.CAUseCase, root *conf.RootCert, logger log.Logger)
 }
 
 func (s *CertService) GenKey(ctx context.Context, req *pb.GenKeyRequest) (*pb.GenKeyResponse, error) {
+	if req.Password == "" {
+		return nil, errors.New("password is empty")
+	}
+
 	privateKeyStr, err := s.generateKey(ctx, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "GenKey error")
@@ -98,7 +102,10 @@ func (s *CertService) CSR(ctx context.Context, req *pb.CSRRequest) (*pb.CSRRespo
 func (s *CertService) GetCert(ctx context.Context, req *pb.CertRequest) (*pb.CertResponse, error) {
 	// load cert
 	cert, err := s.repo.GetCert(ctx, req.Common)
-	if err != nil && err != redis.Nil {
+	if err != nil {
+		if err == redis.Nil {
+			return nil, errors.Errorf("cert: %s is not found in service", req.Common)
+		}
 		return nil, errors.Wrap(err, "get cert error")
 	}
 	return &pb.CertResponse{Cert: cert}, nil

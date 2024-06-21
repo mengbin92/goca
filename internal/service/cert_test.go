@@ -12,9 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var s *CertService
+func newSelfSign(common string, typ conf.KeyType)(*CertService,error){
 
-func newService() *CertService {
 	redisConf := &conf.Data{
 		Redis: &conf.Redis{
 			Addr:     "127.0.0.1:6379",
@@ -27,7 +26,7 @@ func newService() *CertService {
 	useCase := biz.NewCAUseCase(repo, nil)
 
 	rootCert := &conf.RootCert{
-		Common:           "ROOTCA",
+		Common:           common,
 		Country:          "CN",
 		Province:         "GD",
 		Locality:         "SZ",
@@ -37,44 +36,122 @@ func newService() *CertService {
 		Dns:              []string{"test.com"},
 		Ip:               []string{"123.123.123.123", "123.123.123.124"},
 		KeyPair: &conf.KeyPair{
-			KeyType: conf.KeyType_RSA,
+			KeyType: typ,
 			KeySize: 2048,
+			Password: "passowd",
 		},
 	}
 
-	s, err := NewCertService(useCase, rootCert, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	return s
+	return NewCertService(useCase, rootCert, nil)
 }
 
 func TestNewCertService(t *testing.T) {
-	s = newService()
-	assert.NotNil(t, s)
+	tests := []struct{
+		name string
+		common string
+		keyTpye conf.KeyType
+	}{
+		{
+			name :"rsa cert",
+			common: "rsa_common",
+			keyTpye: conf.KeyType_RSA,
+		},
+		{
+			name :"ecdsa cert",
+			common: "ecdsa_common",
+			keyTpye: conf.KeyType_ECDSA,
+		},
+	}
+
+	for _,tt := range tests{
+		t.Run(tt.name,func(t *testing.T) {
+			s,err := newSelfSign(tt.common,tt.keyTpye)
+			assert.Nil(t, err)
+			assert.NotNil(t,s)
+		})
+	}
 }
 
 func TestGenKey(t *testing.T) {
-	s = newService()
+	s,err := newSelfSign("test",conf.KeyType_RSA)
+	assert.Nil(t,err)
 	assert.NotNil(t, s)
 
-	req := &pb.GenKeyRequest{
-		KeyType: pb.KeyType_RSA,
-		KeySize: 2048,
-		Common:  "123456",
+	tests := []struct{
+		name string
+		req *pb.GenKeyRequest
+		emptyError bool
+		unknowTypeError bool
+	}{
+		{
+			name:"generate RSA key pair",
+			unknowTypeError: false,
+			emptyError: false,
+			req: &pb.GenKeyRequest{
+				KeyType: pb.KeyType_RSA,
+				KeySize: 2048,
+				Common:  "123456",
+				Password: "rsapwd",
+			},
+		},
+		{
+			name:"generate ECDSA key pair",
+			unknowTypeError: false,
+			emptyError: false,
+			req: &pb.GenKeyRequest{
+				KeyType: pb.KeyType_ECDSA,
+				Common:  "123456",
+				Password: "ecdsapwd",
+			},
+		},
+		{
+			name:"generate RSA key pair without password",
+			unknowTypeError: false,
+			emptyError: true,
+			req: &pb.GenKeyRequest{
+				KeyType: pb.KeyType_RSA,
+				KeySize: 2048,
+				Common:  "123456",
+			},
+		},
+		{
+			name:"generate unknow key pair",
+			unknowTypeError: true,
+			emptyError: false,
+			req: &pb.GenKeyRequest{
+				KeyType: 3,
+				KeySize: 2048,
+				Common:  "123456",
+				Password: "ecdsapwd",
+			},
+		},
 	}
 
-	resp, err := s.GenKey(context.Background(), req)
-	assert.Nil(t, err)
-	assert.NotNil(t, resp)
-
-	assert.Equal(t, req.Common, resp.Common)
-	assert.Equal(t, req.KeyType, resp.KeyType)
+	for _,tt:= range tests{
+		t.Run(tt.name,func(t *testing.T) {
+			if !tt.emptyError && !tt.unknowTypeError{
+				resp, err := s.GenKey(context.Background(), tt.req)
+				assert.Nil(t, err)
+				assert.NotNil(t, resp)
+			
+				assert.Equal(t, tt.req.Common, resp.Common)
+				assert.Equal(t, tt.req.KeyType, resp.KeyType)
+			}else if tt.emptyError{
+				resp, err := s.GenKey(context.Background(), tt.req)
+				assert.Contains(t,err.Error(),"password is empty")
+				assert.Nil(t,resp)
+			} else if tt.unknowTypeError{
+				resp, err := s.GenKey(context.Background(), tt.req)
+				assert.Contains(t,err.Error(),"invalid key type")
+				assert.Nil(t,resp)
+			}
+		})
+	}
 }
 
 func TestCSR(t *testing.T) {
-	s = newService()
+	s,err := newSelfSign("test",conf.KeyType_RSA)
+	assert.Nil(t,err)
 	assert.NotNil(t, s)
 
 	req := &pb.CSRRequest{
@@ -97,24 +174,56 @@ func TestCSR(t *testing.T) {
 }
 
 func TestGetCert(t *testing.T) {
-	s = newService()
+	s,err := newSelfSign("test",conf.KeyType_RSA)
+	assert.Nil(t,err)
 	assert.NotNil(t, s)
 
-	resp, err := s.GetCert(context.Background(), &pb.CertRequest{
-		Common: "ROOTCA",
-	})
-	assert.Nil(t, err)
-	assert.NotNil(t, resp)
+	tests := []struct {
+		name        string
+		common      string
+		returnError bool
+	}{
+		{
+			name:        "common exist",
+			common:      "test",
+			returnError: false,
+		},
+		{
+			name:        "common not exist",
+			common:      "nocommon",
+			returnError: true,
+		},
+	}
 
-	cert, err := utils.LoadCert(resp.Cert)
-	assert.Nil(t, err)
-	assert.NotNil(t, cert)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.returnError {
+				resp, err := s.GetCert(context.Background(), &pb.CertRequest{
+					Common: tt.common,
+				})
+				assert.Contains(t, err.Error(), " is not found in service")
+				assert.Nil(t, resp)
+			} else {
+				resp, err := s.GetCert(context.Background(), &pb.CertRequest{
+					Common: tt.common,
+				})
+				assert.Nil(t, err)
+				assert.NotNil(t, resp)
 
-	assert.Equal(t, "ROOTCA", cert.Subject.CommonName)
+				cert, err := utils.LoadCert(resp.Cert)
+				assert.Nil(t, err)
+				assert.NotNil(t, cert)
+
+				assert.Equal(t, tt.common, cert.Subject.CommonName)
+			}
+		})
+	}
+
 }
 
 func TestCASignCSR(t *testing.T) {
-	s = newService()
+	s,err := newSelfSign("test",conf.KeyType_RSA)
+	assert.Nil(t,err)
 	assert.NotNil(t, s)
 
 	csrReq := &pb.CSRRequest{
@@ -141,7 +250,7 @@ func TestCASignCSR(t *testing.T) {
 
 	certReq := &pb.CASignCSRRequest{
 		Csr:      csrResp.Csr,
-		CaCommon: "ROOTCA",
+		CaCommon: "test",
 		Days:     365,
 	}
 
@@ -153,22 +262,23 @@ func TestCASignCSR(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, cert)
 
-	assert.Equal(t, "ROOTCA", cert.Issuer.CommonName)
+	assert.Equal(t, "test", cert.Issuer.CommonName)
 	assert.Equal(t, csrReq.Common, cert.Subject.CommonName)
 }
 
 func TestRevokeCert(t *testing.T) {
-	s = newService()
+	s,err := newSelfSign("test",conf.KeyType_RSA)
+	assert.Nil(t,err)
 	assert.NotNil(t, s)
 
 	revokedReq := &pb.RevokeCertRequest{
 		SerialNumber: "214479120649001408102415970299220634165",
-		CaCommon:     "ROOTCA",
+		CaCommon:     "test",
 	}
 	resp, err := s.RevokeCert(context.Background(), revokedReq)
 	assert.Nil(t, err)
 	assert.NotNil(t, resp)
-	assert.Equal(t, "ROOTCA", resp.CaCommon)
+	assert.Equal(t, "test", resp.CaCommon)
 
 	crl, err := utils.LoadCRL(resp.Crl)
 	assert.Nil(t, err)
