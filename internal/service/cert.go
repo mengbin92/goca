@@ -75,45 +75,21 @@ func NewCertService(cert *biz.CAUseCase, root *conf.RootCert, logger log.Logger)
 }
 
 func (s *CertService) GenKey(ctx context.Context, req *pb.GenKeyRequest) (*pb.GenKeyResponse, error) {
-	var privateKeyStr string
-	var err error
-
-	if req.KeyType == pb.KeyType_RSA {
-		privateKey, err := utils.GenRSAKey(int(req.KeySize))
-		if err != nil {
-			return nil, errors.Wrap(err, "generate rsa key error")
-		}
-		privateKeyStr = utils.RSAPrivateKeyToPEM(privateKey)
-	} else if req.KeyType == pb.KeyType_ECDSA {
-		privateKey, err := utils.GenECDSAKey()
-		if err != nil {
-			return nil, errors.Wrap(err, "generate ecdsa key error")
-		}
-		privateKeyStr = utils.ECDSAPrivateKeyToPEM(privateKey)
-	} else {
-		return nil, errors.Errorf("invalid key type: %d", req.KeyType)
-	}
-	if err = s.repo.SavePrivateKey(ctx, req.Common, privateKeyStr); err != nil {
-		return nil, errors.Wrap(err, "save private key error")
+	privateKeyStr, err := s.generateKey(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "GenKey error")
 	}
 	return &pb.GenKeyResponse{
 		KeyType:    req.KeyType,
 		PrivateKey: privateKeyStr,
 		Common:     req.Common,
-	}, err
+	}, nil
 }
 func (s *CertService) CSR(ctx context.Context, req *pb.CSRRequest) (*pb.CSRResponse, error) {
-	// load private key
-	privateKeyString, err := s.repo.GetPrivateKey(ctx, req.Common)
+	csr, err := s.csr(ctx, req)
 	if err != nil {
-		return nil, errors.Wrap(err, "get private key error")
+		return nil, errors.Wrap(err, "CSR error")
 	}
-
-	csr, err := utils.GenerateCSR(privateKeyString, req)
-	if err != nil {
-		return nil, errors.Wrap(err, "generate csr error")
-	}
-
 	return &pb.CSRResponse{
 		CaCommon: req.CaCommon,
 		Csr:      csr,
@@ -129,20 +105,12 @@ func (s *CertService) GetCert(ctx context.Context, req *pb.CertRequest) (*pb.Cer
 }
 func (s *CertService) CASignCSR(ctx context.Context, req *pb.CASignCSRRequest) (*pb.CASignCSRResponse, error) {
 	// load ca private key
-	caPrivateKeyStr, err := s.repo.GetPrivateKey(ctx, req.CaCommon)
-	if err != nil && err != redis.Nil {
-		return nil, errors.Wrap(err, "get ca private key error")
-	}
-	caPrivateKey, err := utils.LoadPrivateKey(caPrivateKeyStr)
+	caPrivateKey, err := s.LoadPrivateKey(ctx, req.CaCommon)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse ca private key error")
 	}
 	// load parent cert
-	caCertStr, err := s.repo.GetCert(ctx, req.CaCommon)
-	if err != nil && err != redis.Nil {
-		return nil, errors.Wrap(err, "get ca private key error")
-	}
-	caCert, err := utils.LoadCert(caCertStr)
+	caCert, err := s.loadCert(ctx, req.CaCommon)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse ca private key error")
 	}
@@ -160,7 +128,9 @@ func (s *CertService) CASignCSR(ctx context.Context, req *pb.CASignCSRRequest) (
 	}
 
 	// save cert to local
-	s.repo.SaveCert(ctx, csr.Subject.CommonName, cert)
+	if err := s.repo.SaveCert(ctx, csr.Subject.CommonName, cert); err != nil {
+		return nil, errors.Wrapf(err, "save cert: %s error", csr.Subject.CommonName)
+	}
 
 	return &pb.CASignCSRResponse{
 		SerialNumber: serial.String(),
@@ -199,21 +169,13 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	revokeds = append(revokeds, newRevoked)
 
 	// load ca private key
-	caPrivateKeyStr, err := s.repo.GetPrivateKey(ctx, req.CaCommon)
-	if err != nil {
-		return nil, errors.Wrap(err, "get ca private key error")
-	}
-	caPrivateKey, err := utils.LoadPrivateKey(caPrivateKeyStr)
+	caPrivateKey, err := s.LoadPrivateKey(ctx, req.CaCommon)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse ca private key error")
 	}
 
 	// load ca cert
-	caCertStr, err := s.repo.GetCert(ctx, req.CaCommon)
-	if err != nil && err != redis.Nil {
-		return nil, errors.Wrap(err, "get ca cert error")
-	}
-	caCert, err := utils.LoadCert(caCertStr)
+	caCert, err := s.loadCert(ctx, req.CaCommon)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse ca cert error")
 	}
@@ -240,48 +202,26 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	}, nil
 }
 func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PKCS12Response, error) {
-	// // loca ca cert and private key
-	// caCertStr, err := s.repo.GetCert(ctx, req.CaCommon)
-	// if err != nil {
-	// 	return nil, errors.Wrap(err, "get ca cert error")
-	// }
-	// caCert, err := utils.LoadCert(caCertStr)
+	// loca ca cert and private key
+	// caCert, err := s.loadCert(ctx, req.CaCommon)
 	// if err != nil {
 	// 	return nil, errors.Wrap(err, "parse ca cert error")
 	// }
-	// caPrivateKeyStr, err := s.repo.GetPrivateKey(ctx, req.CaCommon)
-	// if err != nil  {
-	// 	return nil, errors.Wrap(err, "get ca private key error")
-	// }
-	// caPrivateKey, err := utils.LoadPrivateKey(caPrivateKeyStr)
+	// caPrivateKey, err := s.LoadPrivateKey(ctx, req.CaCommon)
 	// if err != nil {
 	// 	return nil, errors.Wrap(err, "parse ca private key error")
 	// }
 
-	// // new keys with request
-	// var privateKeyStr string
-	// if req.GenKeyRequest.KeyType == pb.KeyType_RSA {
-	// 	privateKey, err := utils.GenRSAKey(int(req.GenKeyRequest.KeySize))
-	// 	if err != nil {
-	// 		return nil, errors.Wrap(err, "generate rsa key error")
-	// 	}
-	// 	privateKeyStr = utils.RSAPrivateKeyToPEM(privateKey)
-	// } else if req.GenKeyRequest.KeyType == pb.KeyType_ECDSA {
-	// 	privateKey, err := utils.GenECDSAKey()
-	// 	if err != nil {
-	// 		return nil, errors.Wrap(err, "generate ecdsa key error")
-	// 	}
-	// 	privateKeyStr = utils.ECDSAPrivateKeyToPEM(privateKey)
-	// } else {
-	// 	return nil, errors.Errorf("invalid key type: %d", req.GenKeyRequest.KeyType)
+	// new keys with request
+	// privateKeyStr,err := s.generateKey(ctx,req.GenKeyRequest)
+	// if err != nil{
+	// 	return nil,errors.Wrap(err,"generateKey error while generate PKCS12")
 	// }
-	// // save to local
-	// s.repo.SavePrivateKey(ctx, req.GenKeyRequest.Common, privateKeyStr)
-
 	// privateKey, err := utils.LoadPrivateKey(privateKeyStr)
 	// if err != nil {
 	// 	return nil, errors.Wrap(err, "parse private key error")
 	// }
+
 	// // new csr
 	// csrStr, err := utils.GenerateCSR(privateKeyStr, req.CsrRequest)
 	// if err != nil {
