@@ -309,7 +309,7 @@ func GenECDSARootCert(privateKey *ecdsa.PrivateKey, config *conf.RootCert) (stri
 			Bytes: crlBytes})), nil
 }
 
-func SignCert(private any, csr *x509.CertificateRequest, day int) (string, *big.Int, error) {
+func SignCert(private any, parent *x509.Certificate, csr *x509.CertificateRequest, day int) (string, *big.Int, error) {
 	var publicKey any
 	switch private.(type) {
 	case *rsa.PrivateKey:
@@ -342,7 +342,7 @@ func SignCert(private any, csr *x509.CertificateRequest, day int) (string, *big.
 		return "", nil, errors.Wrap(err, "generate subject key identifier failed")
 	}
 	certTemp.SubjectKeyId = ski
-	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, &certTemp, publicKey, private)
+	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, parent, publicKey, private)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "create cert failed")
 	}
