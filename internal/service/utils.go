@@ -17,36 +17,27 @@ func (s *CertService) loadCert(ctx context.Context, common string) (*x509.Certif
 	return utils.LoadCert(caCertStr)
 }
 
-func (s *CertService) LoadPrivateKey(ctx context.Context, common string) (any, error) {
+func (s *CertService) loadPrivateKey(ctx context.Context, common string) (any, error) {
 	privateKeyStr, err := s.repo.GetPrivateKey(ctx, common)
 	if err != nil {
 		return nil, err
 	}
-	return utils.LoadPrivateKey(privateKeyStr)
+	return utils.PrivatePemToKey(privateKeyStr)
 }
 
 func (s *CertService) generateKey(ctx context.Context, req *pb.GenKeyRequest) (string, error) {
-	var privateKeyStr string
-
-	if req.KeyType == pb.KeyType_RSA {
-		privateKey, err := utils.GenRSAKey(int(req.KeySize))
-		if err != nil {
-			return "", errors.Wrap(err, "generate rsa key error")
-		}
-		privateKeyStr = utils.RSAPrivateKeyToPEM(privateKey)
-	} else if req.KeyType == pb.KeyType_ECDSA {
-		privateKey, err := utils.GenECDSAKey()
-		if err != nil {
-			return "", errors.Wrap(err, "generate ecdsa key error")
-		}
-		privateKeyStr = utils.ECDSAPrivateKeyToPEM(privateKey)
-	} else {
-		return "", errors.Errorf("invalid key type: %d", req.KeyType)
+	priv, err := utils.GenerateKey(req)
+	if err != nil {
+		return "", errors.Wrap(err, "generate key error")
 	}
-	if err := s.repo.SavePrivateKey(ctx, req.Common, privateKeyStr); err != nil {
+	privStr, err := utils.PrivateToPEM(priv)
+	if err != nil {
+		return "", errors.Wrap(err, "private key to pem error")
+	}
+	if err := s.repo.SavePrivateKey(ctx, req.Common, privStr); err != nil {
 		return "", errors.Wrap(err, "save private key error")
 	}
-	return privateKeyStr, nil
+	return privStr, nil
 }
 
 func (s *CertService) csr(ctx context.Context, req *pb.CSRRequest) (string, error) {
@@ -54,8 +45,16 @@ func (s *CertService) csr(ctx context.Context, req *pb.CSRRequest) (string, erro
 	if err != nil {
 		return "", errors.Wrap(err, "get private key error")
 	}
+	if len(privateKeyString) == 0 {
+		return "", errors.Errorf("private key: %s not found", req.Common)
+	}
 
-	csr, err := utils.GenerateCSR(privateKeyString, req)
+	priv, err := utils.PrivatePemToKey(privateKeyString)
+	if err != nil {
+		return "", errors.Wrap(err, "parse pem private key error")
+	}
+
+	csr, err := utils.GenerateCSR(priv, req)
 	if err != nil {
 		return "", errors.Wrap(err, "generate csr error")
 	}

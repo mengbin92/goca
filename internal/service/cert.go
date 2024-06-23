@@ -31,33 +31,27 @@ func NewCertService(cert *biz.CAUseCase, root *conf.RootCert, logger log.Logger)
 		return nil, errors.Wrap(err, "get root cert error")
 	}
 	if rootCert == "" {
-		var privateKeyStr, rootCert, crl string
-		var err error
-		if root.KeyPair.KeyType == conf.KeyType_RSA {
-			privateKey, err := utils.GenRSAKey(int(root.KeyPair.KeySize))
-			if err != nil {
-				return nil, errors.Wrap(err, "generate rsa key error")
-			}
-			privateKeyStr = utils.RSAPrivateKeyToPEM(privateKey)
 
-			rootCert, crl, err = utils.GenRSARootCert(privateKey, root)
-			if err != nil {
-				return nil, errors.Wrap(err, "generate rsa root cert error")
-			}
-		} else if root.KeyPair.KeyType == conf.KeyType_ECDSA {
-			privateKey, err := utils.GenECDSAKey()
-			if err != nil {
-				return nil, errors.Wrap(err, "generate ecdsa key error")
-			}
-			privateKeyStr = utils.ECDSAPrivateKeyToPEM(privateKey)
-			rootCert, crl, err = utils.GenECDSARootCert(privateKey, root)
-			if err != nil {
-				return nil, errors.Wrap(err, "generate ecdsa root cert error")
-			}
-		} else {
-			return nil, errors.Errorf("invalid key type: %d", root.KeyPair.KeyType)
+		privSrt, err := cs.generateKey(context.Background(), &pb.GenKeyRequest{
+			KeyType:  pb.KeyType(root.KeyPair.KeyType),
+			KeySize:  root.KeyPair.KeySize,
+			Common:   root.Common,
+			Password: root.KeyPair.Password,
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "generate root key error")
 		}
-		if err = cs.repo.SavePrivateKey(context.Background(), root.Common, privateKeyStr); err != nil {
+		priv, err := utils.PrivatePemToKey(privSrt)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse pem private key error")
+		}
+
+		rootCert, crl, err := utils.GenerateRootCert(priv, root)
+		if err != nil {
+			return nil, errors.Wrap(err, "generate root cert error")
+		}
+
+		if err = cs.repo.SavePrivateKey(context.Background(), root.Common, privSrt); err != nil {
 			return nil, errors.Wrap(err, "save private key error")
 		}
 		if err = cs.repo.SaveCert(context.Background(), root.Common, rootCert); err != nil {
@@ -108,11 +102,14 @@ func (s *CertService) GetCert(ctx context.Context, req *pb.CertRequest) (*pb.Cer
 		}
 		return nil, errors.Wrap(err, "get cert error")
 	}
+	if len(cert) == 0 {
+		return nil, errors.Errorf("not found cert: %s", req.Common)
+	}
 	return &pb.CertResponse{Cert: cert}, nil
 }
 func (s *CertService) CASignCSR(ctx context.Context, req *pb.CASignCSRRequest) (*pb.CASignCSRResponse, error) {
 	// load ca private key
-	caPrivateKey, err := s.LoadPrivateKey(ctx, req.CaCommon)
+	caPrivateKey, err := s.loadPrivateKey(ctx, req.CaCommon)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse ca private key error")
 	}
@@ -176,7 +173,7 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	revokeds = append(revokeds, newRevoked)
 
 	// load ca private key
-	caPrivateKey, err := s.LoadPrivateKey(ctx, req.CaCommon)
+	caPrivateKey, err := s.loadPrivateKey(ctx, req.CaCommon)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse ca private key error")
 	}
@@ -209,28 +206,29 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	}, nil
 }
 func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PKCS12Response, error) {
-	// loca ca cert and private key
+	// // loca ca cert and private key
 	// caCert, err := s.loadCert(ctx, req.CaCommon)
 	// if err != nil {
 	// 	return nil, errors.Wrap(err, "parse ca cert error")
 	// }
-	// caPrivateKey, err := s.LoadPrivateKey(ctx, req.CaCommon)
+	// caPrivateKey, err := s.loadPrivateKey(ctx, req.CaCommon)
 	// if err != nil {
 	// 	return nil, errors.Wrap(err, "parse ca private key error")
 	// }
 
-	// new keys with request
-	// privateKeyStr,err := s.generateKey(ctx,req.GenKeyRequest)
-	// if err != nil{
-	// 	return nil,errors.Wrap(err,"generateKey error while generate PKCS12")
-	// }
-	// privateKey, err := utils.LoadPrivateKey(privateKeyStr)
+	// // new keys with request
+	// newPrivateStr, err := s.generateKey(ctx, req.GenKeyRequest)
 	// if err != nil {
-	// 	return nil, errors.Wrap(err, "parse private key error")
+	// 	return nil, errors.Wrap(err, "generateKey error while generate PKCS12")
 	// }
+	// newPrivateKey, err := utils.PrivatePemToKey(newPrivateStr)
+	// if err != nil {
+	// 	return nil, errors.Wrap(err, "parse pem private key error while generate PKCS12")
+	// }
+	// fmt.Println(newPrivateStr)
 
 	// // new csr
-	// csrStr, err := utils.GenerateCSR(privateKeyStr, req.CsrRequest)
+	// csrStr, err := s.csr(ctx, req.CsrRequest)
 	// if err != nil {
 	// 	return nil, errors.Wrap(err, "generate csr error")
 	// }
@@ -244,14 +242,15 @@ func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PK
 	// 	return nil, errors.Wrap(err, "ca sign csr error")
 	// }
 	// // save to local
-	// s.repo.SaveCert(ctx, req.GenKeyRequest.Common, certStr)
-
+	// if err := s.repo.SaveCert(ctx, req.GenKeyRequest.Common, certStr); err != nil {
+	// 	return nil, errors.Wrap(err, "save cert error")
+	// }
 	// cert, err := utils.LoadCert(certStr)
 	// if err != nil {
 	// 	return nil, errors.Wrap(err, "load cert error")
 	// }
 
-	// pkfDate, err := pkcs12.Legacy.Encode(privateKey, cert, []*x509.Certificate{caCert}, req.GenKeyRequest.Password)
+	// pkfDate, err := pkcs12.Legacy.Encode(newPrivateKey, cert, []*x509.Certificate{caCert}, req.GenKeyRequest.Password)
 	// if err != nil {
 	// 	return nil, errors.Wrap(err, "encode pkcs12 error")
 	// }

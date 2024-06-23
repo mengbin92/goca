@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -19,39 +20,45 @@ import (
 	"github.com/mengbin92/goca/internal/conf"
 )
 
-// 生成RSA密钥对
-func GenRSAKey(keySize int) (*rsa.PrivateKey, error) {
-	return rsa.GenerateKey(rand.Reader, keySize)
-}
-
-// RSA私钥转PEM格式
-func RSAPrivateKeyToPEM(privateKey *rsa.PrivateKey) string {
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	})
-	return string(privateKeyPEM)
-}
-
-// 生成ECDSA密钥对
-func GenECDSAKey() (*ecdsa.PrivateKey, error) {
-	// 选择椭圆曲线，这里选择P256
-	curve := elliptic.P256()
-	return ecdsa.GenerateKey(curve, rand.Reader)
-}
-
-// ECDSA私钥转PEM格式
-func ECDSAPrivateKeyToPEM(privateKey *ecdsa.PrivateKey) string {
-	privateKeyBytes, err := x509.MarshalECPrivateKey(privateKey)
-	if err != nil {
-		return ""
+// 生成密钥对
+func GenerateKey(req *pb.GenKeyRequest) (any, error) {
+	switch req.KeyType {
+	case pb.KeyType_RSA:
+		return rsa.GenerateKey(rand.Reader, int(req.KeySize))
+	case pb.KeyType_ECDSA:
+		curve := elliptic.P256()
+		return ecdsa.GenerateKey(curve, rand.Reader)
+	default:
+		return nil, errors.Errorf("invalid key type: %d", req.KeyType)
 	}
-	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "EC PRIVATE KEY",
-		Bytes: privateKeyBytes,
+}
+
+// privateKey转PEM格式
+func PrivateToPEM(priv any) (string, error) {
+
+	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal private key failed")
+	}
+
+	privPem := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: privBytes,
 	})
-	return string(privateKeyPEM)
+	return string(privPem), nil
+}
+
+func PrivatePemToKey(privStr string) (any, error) {
+	privPem, _ := pem.Decode([]byte(privStr))
+	if privPem == nil {
+		return nil, errors.New("decode private key failed")
+	}
+
+	if privPem.Type != "PRIVATE KEY" {
+		return nil, errors.Errorf("invalid private key type: %s", privPem.Type)
+	}
+
+	return x509.ParsePKCS8PrivateKey(privPem.Bytes)
 }
 
 // string格式的IP地址转换成net.IP
@@ -67,7 +74,7 @@ func StrToIP(ips []string) (netIPs []net.IP, err error) {
 }
 
 // 生成CSR
-func GenerateCSR(private string, req *pb.CSRRequest) (string, error) {
+func GenerateCSR(private any, req *pb.CSRRequest) (string, error) {
 	var csrBytes []byte
 	var err error
 
@@ -91,12 +98,7 @@ func GenerateCSR(private string, req *pb.CSRRequest) (string, error) {
 		IPAddresses:    netIPs,
 	}
 
-	privateKey, err := LoadPrivateKey(private)
-	if err != nil {
-		return "", errors.Wrap(err, "load private key failed")
-	}
-
-	csrBytes, err = x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privateKey)
+	csrBytes, err = x509.CreateCertificateRequest(rand.Reader, &csrTemplate, private)
 	if err != nil {
 		return "", errors.Wrap(err, "create rsa csr failed")
 	}
@@ -115,6 +117,9 @@ func LoadCSR(csr string) (*x509.CertificateRequest, error) {
 	if csrBlock == nil {
 		return nil, errors.New("decode csr failed")
 	}
+	if csrBlock.Type != "CERTIFICATE REQUEST" {
+		return nil, errors.Errorf("invalid csr type: %s", csrBlock.Type)
+	}
 	csrTemplate, err := x509.ParseCertificateRequest(csrBlock.Bytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse csr failed")
@@ -128,6 +133,9 @@ func LoadCert(cert string) (*x509.Certificate, error) {
 	if certBlock == nil {
 		return nil, errors.New("decode cert failed")
 	}
+	if certBlock.Type != "CERTIFICATE" {
+		return nil, errors.Errorf("invalid cert type: %s", certBlock.Type)
+	}
 	certTemplate, err := x509.ParseCertificate(certBlock.Bytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse cert failed")
@@ -135,57 +143,30 @@ func LoadCert(cert string) (*x509.Certificate, error) {
 	return certTemplate, nil
 }
 
-// load private from pem string
-func LoadPrivateKey(str string) (any, error) {
-	privateBlock, _ := pem.Decode([]byte(str))
-	if privateBlock == nil {
-		return nil, errors.New("decode private key failed")
-	}
-	if privateBlock.Type == "RSA PRIVATE KEY" {
-		rsaPrivateKey, err := x509.ParsePKCS1PrivateKey(privateBlock.Bytes)
-		if err != nil {
-			return "", errors.Wrap(err, "parse rsa private key failed")
-		}
-		return rsaPrivateKey, nil
-	} else if privateBlock.Type == "EC PRIVATE KEY" {
-		ecdsaPrivateKey, err := x509.ParseECPrivateKey(privateBlock.Bytes)
-		if err != nil {
-			return "", errors.Wrap(err, "parse ecdsa private key failed")
-		}
-		return ecdsaPrivateKey, nil
-	} else {
-		return "", errors.New("invalid private key type")
+func toCryptoSigner(priv any) (crypto.Signer, error) {
+	switch key := priv.(type) {
+	case *rsa.PrivateKey:
+		return key, nil
+	case *ecdsa.PrivateKey:
+		return key, nil
+	default:
+		return nil, errors.New("unsupported private key type")
 	}
 }
 
-// load RSA private from pem string
-func LoadRSAPrivateKey(str string) (*rsa.PrivateKey, error) {
-	privateBlock, _ := pem.Decode([]byte(str))
-	if privateBlock == nil {
-		return nil, errors.New("decode RSA private key failed")
+func getPublicKey(priv any) (any, error) {
+	switch key := priv.(type) {
+	case *rsa.PrivateKey:
+		return key.PublicKey, nil
+	case *ecdsa.PrivateKey:
+		return key.PublicKey, nil
+	default:
+		return nil, errors.New("unsupported private key type")
 	}
-	rsaPrivateKey, err := x509.ParsePKCS1PrivateKey(privateBlock.Bytes)
-	if err != nil {
-		return nil, errors.Wrap(err, "parse rsa private key failed")
-	}
-	return rsaPrivateKey, nil
 }
 
-// load ecdsa private from pem string
-func LoadECDSAPrivateKey(str string) (*ecdsa.PrivateKey, error) {
-	privateBlock, _ := pem.Decode([]byte(str))
-	if privateBlock == nil {
-		return nil, errors.New("decode ECDSA private key failed")
-	}
-	ecdsaPrivateKey, err := x509.ParseECPrivateKey(privateBlock.Bytes)
-	if err != nil {
-		return nil, errors.Wrap(err, "parse ecdsa private key failed")
-	}
-	return ecdsaPrivateKey, nil
-}
-
-// 生成RSA根证书
-func GenRSARootCert(privateKey *rsa.PrivateKey, config *conf.RootCert) (string, string, error) {
+// 生成根证书和CRL
+func GenerateRootCert(priv any, config *conf.RootCert) (string, string, error) {
 	// 生成证书编号
 	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
@@ -198,7 +179,7 @@ func GenRSARootCert(privateKey *rsa.PrivateKey, config *conf.RootCert) (string, 
 		return "", "", errors.Wrap(err, "invalid ip")
 	}
 	// 生成证书
-	certTemp := x509.Certificate{
+	certTemp := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName:         config.Common,
@@ -218,25 +199,40 @@ func GenRSARootCert(privateKey *rsa.PrivateKey, config *conf.RootCert) (string, 
 		IsCA:                  true,
 		BasicConstraintsValid: true,
 	}
-	// 生成Subject Key Identifier
-	ski, err := generateSubjectKeyIdentifier(&privateKey.PublicKey)
+
+	crlTemp := &x509.RevocationList{
+		SignatureAlgorithm:        certTemp.SignatureAlgorithm,
+		RevokedCertificateEntries: []x509.RevocationListEntry{},
+		Number:                    big.NewInt(0),
+		ThisUpdate:                time.Now(),
+		NextUpdate:                time.Now().AddDate(0, 0, 1),
+	}
+
+	var publicKey any
+	switch key := priv.(type) {
+	case *rsa.PrivateKey:
+		publicKey = &key.PublicKey
+	case *ecdsa.PrivateKey:
+		publicKey = &key.PublicKey
+	default:
+		return "", "", errors.New("invalid private key type")
+	}
+	ski, err := generateSubjectKeyIdentifier(publicKey)
 	if err != nil {
 		return "", "", errors.Wrap(err, "generate subject key identifier failed")
 	}
 	certTemp.SubjectKeyId = ski
-	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, &certTemp, &privateKey.PublicKey, privateKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, certTemp, certTemp, publicKey, priv)
 	if err != nil {
 		return "", "", errors.Wrap(err, "create cert failed")
 	}
 
-	crlTemp := x509.RevocationList{
-		SignatureAlgorithm:        certTemp.SignatureAlgorithm,
-		RevokedCertificateEntries: []x509.RevocationListEntry{},
-		Number:                    big.NewInt(0),
-		ThisUpdate:                time.Now(),
-		NextUpdate:                time.Now().AddDate(0, 0, 1),
+	signer, err := toCryptoSigner(priv)
+	if err != nil {
+		return "", "", errors.Wrapf(err, "parse private key to crypto.Signer error")
 	}
-	crlBytes, err := x509.CreateRevocationList(rand.Reader, &crlTemp, &certTemp, privateKey)
+
+	crlBytes, err := x509.CreateRevocationList(rand.Reader, crlTemp, certTemp, signer)
 	if err != nil {
 		return "", "", errors.Wrap(err, "create crl failed")
 	}
@@ -249,76 +245,7 @@ func GenRSARootCert(privateKey *rsa.PrivateKey, config *conf.RootCert) (string, 
 			Bytes: crlBytes})), nil
 }
 
-// 生成ECDSA根证书
-func GenECDSARootCert(privateKey *ecdsa.PrivateKey, config *conf.RootCert) (string, string, error) {
-	// 生成证书编号
-	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	if err != nil {
-		return "", "", errors.Wrap(err, "generate serial number failed")
-	}
-
-	// string IP 转换成 net.IP
-	netIPs, err := StrToIP(config.Ip)
-	if err != nil {
-		return "", "", errors.Wrap(err, "invalid ip")
-	}
-	// 生成证书
-	certTemp := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			CommonName:         config.Common,
-			Organization:       []string{config.Organization},
-			OrganizationalUnit: []string{config.OrganizationUnit},
-			Country:            []string{config.Country},
-			Province:           []string{config.Province},
-			Locality:           []string{config.Locality},
-		},
-		EmailAddresses: []string{config.Email},
-		DNSNames:       config.Dns,
-		IPAddresses:    netIPs,
-		KeyUsage:       x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCRLSign,
-		ExtKeyUsage:    []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
-	// 生成Subject Key Identifier
-	ski, err := generateSubjectKeyIdentifier(&privateKey.PublicKey)
-	if err != nil {
-		panic(err)
-	}
-	certTemp.SubjectKeyId = ski
-	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, &certTemp, &privateKey.PublicKey, privateKey)
-	if err != nil {
-		return "", "", errors.Wrap(err, "create cert failed")
-	}
-	crlTemp := x509.RevocationList{
-		SignatureAlgorithm:        certTemp.SignatureAlgorithm,
-		RevokedCertificateEntries: []x509.RevocationListEntry{},
-		Number:                    big.NewInt(0),
-		ThisUpdate:                time.Now(),
-		NextUpdate:                time.Now().AddDate(0, 0, 1),
-	}
-	crlBytes, err := x509.CreateRevocationList(rand.Reader, &crlTemp, &certTemp, privateKey)
-	if err != nil {
-		return "", "", errors.Wrap(err, "create crl failed")
-	}
-
-	return string(pem.EncodeToMemory(&pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: certBytes,
-		})), string(pem.EncodeToMemory(&pem.Block{
-			Type:  "X509 CRL",
-			Bytes: crlBytes})), nil
-}
-
-func SignCert(private any, parent *x509.Certificate, csr *x509.CertificateRequest, day int) (string, *big.Int, error) {
-	var publicKey any
-	switch private.(type) {
-	case *rsa.PrivateKey:
-		publicKey = &private.(*rsa.PrivateKey).PublicKey
-	case *ecdsa.PrivateKey:
-		publicKey = &private.(*ecdsa.PrivateKey).PublicKey
-	default:
-		return "", nil, errors.New("invalid private key type")
-	}
+func SignCert(priv any, parent *x509.Certificate, csr *x509.CertificateRequest, day int) (string, *big.Int, error) {
 	// 生成证书编号
 	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
@@ -337,12 +264,21 @@ func SignCert(private any, parent *x509.Certificate, csr *x509.CertificateReques
 		KeyUsage:       x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 	}
 	// 生成Subject Key Identifier
+	var publicKey any
+	switch key := priv.(type) {
+	case *rsa.PrivateKey:
+		publicKey = &key.PublicKey
+	case *ecdsa.PrivateKey:
+		publicKey = &key.PublicKey
+	default:
+		return "", nil, errors.New("invalid private key type")
+	}
 	ski, err := generateSubjectKeyIdentifier(publicKey)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "generate subject key identifier failed")
 	}
 	certTemp.SubjectKeyId = ski
-	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, parent, publicKey, private)
+	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, parent, publicKey, priv)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "create cert failed")
 	}

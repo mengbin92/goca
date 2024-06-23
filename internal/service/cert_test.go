@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newSelfSign(common string, typ conf.KeyType)(*CertService,error){
+func newSelfSign(common string, typ conf.KeyType) (*CertService, error) {
 
 	redisConf := &conf.Data{
 		Redis: &conf.Redis{
@@ -36,8 +36,8 @@ func newSelfSign(common string, typ conf.KeyType)(*CertService,error){
 		Dns:              []string{"test.com"},
 		Ip:               []string{"123.123.123.123", "123.123.123.124"},
 		KeyPair: &conf.KeyPair{
-			KeyType: typ,
-			KeySize: 2048,
+			KeyType:  typ,
+			KeySize:  2048,
 			Password: "passowd",
 		},
 	}
@@ -46,68 +46,68 @@ func newSelfSign(common string, typ conf.KeyType)(*CertService,error){
 }
 
 func TestNewCertService(t *testing.T) {
-	tests := []struct{
-		name string
-		common string
+	tests := []struct {
+		name    string
+		common  string
 		keyTpye conf.KeyType
 	}{
 		{
-			name :"rsa cert",
-			common: "rsa_common",
+			name:    "rsa cert",
+			common:  "rsa_common",
 			keyTpye: conf.KeyType_RSA,
 		},
 		{
-			name :"ecdsa cert",
-			common: "ecdsa_common",
+			name:    "ecdsa cert",
+			common:  "ecdsa_common",
 			keyTpye: conf.KeyType_ECDSA,
 		},
 	}
 
-	for _,tt := range tests{
-		t.Run(tt.name,func(t *testing.T) {
-			s,err := newSelfSign(tt.common,tt.keyTpye)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := newSelfSign(tt.common, tt.keyTpye)
 			assert.Nil(t, err)
-			assert.NotNil(t,s)
+			assert.NotNil(t, s)
 		})
 	}
 }
 
 func TestGenKey(t *testing.T) {
-	s,err := newSelfSign("test",conf.KeyType_RSA)
-	assert.Nil(t,err)
+	s, err := newSelfSign("test", conf.KeyType_RSA)
+	assert.Nil(t, err)
 	assert.NotNil(t, s)
 
-	tests := []struct{
-		name string
-		req *pb.GenKeyRequest
-		emptyError bool
+	tests := []struct {
+		name            string
+		req             *pb.GenKeyRequest
+		emptyError      bool
 		unknowTypeError bool
 	}{
 		{
-			name:"generate RSA key pair",
+			name:            "generate RSA key pair",
 			unknowTypeError: false,
-			emptyError: false,
+			emptyError:      false,
 			req: &pb.GenKeyRequest{
-				KeyType: pb.KeyType_RSA,
-				KeySize: 2048,
-				Common:  "123456",
+				KeyType:  pb.KeyType_RSA,
+				KeySize:  2048,
+				Common:   "123456",
 				Password: "rsapwd",
 			},
 		},
 		{
-			name:"generate ECDSA key pair",
+			name:            "generate ECDSA key pair",
 			unknowTypeError: false,
-			emptyError: false,
+			emptyError:      false,
 			req: &pb.GenKeyRequest{
-				KeyType: pb.KeyType_ECDSA,
-				Common:  "123456",
+				KeyType:  pb.KeyType_ECDSA,
+				Common:   "123456",
 				Password: "ecdsapwd",
 			},
 		},
 		{
-			name:"generate RSA key pair without password",
+			name:            "generate RSA key pair without password",
 			unknowTypeError: false,
-			emptyError: true,
+			emptyError:      true,
 			req: &pb.GenKeyRequest{
 				KeyType: pb.KeyType_RSA,
 				KeySize: 2048,
@@ -115,43 +115,43 @@ func TestGenKey(t *testing.T) {
 			},
 		},
 		{
-			name:"generate unknow key pair",
+			name:            "generate unknow key pair",
 			unknowTypeError: true,
-			emptyError: false,
+			emptyError:      false,
 			req: &pb.GenKeyRequest{
-				KeyType: 3,
-				KeySize: 2048,
-				Common:  "123456",
+				KeyType:  3,
+				KeySize:  2048,
+				Common:   "123456",
 				Password: "ecdsapwd",
 			},
 		},
 	}
 
-	for _,tt:= range tests{
-		t.Run(tt.name,func(t *testing.T) {
-			if !tt.emptyError && !tt.unknowTypeError{
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !tt.emptyError && !tt.unknowTypeError {
 				resp, err := s.GenKey(context.Background(), tt.req)
 				assert.Nil(t, err)
 				assert.NotNil(t, resp)
-			
+
 				assert.Equal(t, tt.req.Common, resp.Common)
 				assert.Equal(t, tt.req.KeyType, resp.KeyType)
-			}else if tt.emptyError{
+			} else if tt.emptyError {
 				resp, err := s.GenKey(context.Background(), tt.req)
-				assert.Contains(t,err.Error(),"password is empty")
-				assert.Nil(t,resp)
-			} else if tt.unknowTypeError{
+				assert.Contains(t, err.Error(), "password is empty")
+				assert.Nil(t, resp)
+			} else if tt.unknowTypeError {
 				resp, err := s.GenKey(context.Background(), tt.req)
-				assert.Contains(t,err.Error(),"invalid key type")
-				assert.Nil(t,resp)
+				assert.Contains(t, err.Error(), "invalid key type")
+				assert.Nil(t, resp)
 			}
 		})
 	}
 }
 
 func TestCSR(t *testing.T) {
-	s,err := newSelfSign("test",conf.KeyType_RSA)
-	assert.Nil(t,err)
+	s, err := newSelfSign("test", conf.KeyType_RSA)
+	assert.Nil(t, err)
 	assert.NotNil(t, s)
 
 	req := &pb.CSRRequest{
@@ -174,8 +174,8 @@ func TestCSR(t *testing.T) {
 }
 
 func TestGetCert(t *testing.T) {
-	s,err := newSelfSign("test",conf.KeyType_RSA)
-	assert.Nil(t,err)
+	s, err := newSelfSign("test", conf.KeyType_RSA)
+	assert.Nil(t, err)
 	assert.NotNil(t, s)
 
 	tests := []struct {
@@ -209,11 +209,10 @@ func TestGetCert(t *testing.T) {
 				})
 				assert.Nil(t, err)
 				assert.NotNil(t, resp)
-
 				cert, err := utils.LoadCert(resp.Cert)
 				assert.Nil(t, err)
 				assert.NotNil(t, cert)
-
+				t.Log(cert.Subject.CommonName)
 				assert.Equal(t, tt.common, cert.Subject.CommonName)
 			}
 		})
@@ -222,8 +221,8 @@ func TestGetCert(t *testing.T) {
 }
 
 func TestCASignCSR(t *testing.T) {
-	s,err := newSelfSign("test",conf.KeyType_RSA)
-	assert.Nil(t,err)
+	s, err := newSelfSign("test", conf.KeyType_RSA)
+	assert.Nil(t, err)
 	assert.NotNil(t, s)
 
 	csrReq := &pb.CSRRequest{
@@ -267,8 +266,8 @@ func TestCASignCSR(t *testing.T) {
 }
 
 func TestRevokeCert(t *testing.T) {
-	s,err := newSelfSign("test",conf.KeyType_RSA)
-	assert.Nil(t,err)
+	s, err := newSelfSign("test", conf.KeyType_RSA)
+	assert.Nil(t, err)
 	assert.NotNil(t, s)
 
 	revokedReq := &pb.RevokeCertRequest{
@@ -284,3 +283,52 @@ func TestRevokeCert(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, crl)
 }
+
+// func TestPKCS12(t *testing.T) {
+// 	s, err := newSelfSign("test", conf.KeyType_RSA)
+// 	assert.Nil(t, err)
+// 	assert.NotNil(t, s)
+
+// 	req := &pb.PKCS12Request{
+// 		CaCommon: "test",
+// 		GenKeyRequest: &pb.GenKeyRequest{
+// 			KeyType: pb.KeyType_RSA,
+// 			KeySize: 2048,
+// 			Common:  "pkcs12",
+// 		},
+// 		CsrRequest: &pb.CSRRequest{
+// 			Common:           "pkcs12",
+// 			Province:         "Beijing",
+// 			Locality:         "haidian",
+// 			Organization:     "test",
+// 			OrganizationUnit: "test01",
+// 			Email:            "123@qq.com",
+// 			Dns:              []string{"test.com"},
+// 			Ip:               []string{"123.123.123.123"},
+// 		},
+// 		Days: 365,
+// 	}
+
+// 	resp, err := s.PKCS12(context.Background(), req)
+// 	assert.Nil(t, err)
+// 	assert.NotNil(t, resp)
+
+// 	pkfBlock, _ := pem.Decode([]byte(resp.Pkcs12))
+// 	if pkfBlock == nil {
+// 		t.Fatal("decode csr failed")
+// 	}
+// 	priv, cert, caCerts, err := pkcs12.DecodeChain(pkfBlock.Bytes, req.GenKeyRequest.Password)
+// 	assert.Nil(t, err)
+// 	assert.NotNil(t, priv)
+// 	assert.NotNil(t, cert)
+// 	assert.NotNil(t, caCerts)
+
+// 	// privStr,_ := utils.PrivateToPEM(priv)
+// 	// certByte := pem.EncodeToMemory(&pem.Block{
+// 	// 	Type:  "CERTIFICATE",
+// 	// 	Bytes: cert.Raw,
+// 	// })
+
+// 	// fmt.Printf("%s\n", string(certByte))
+// 	// fmt.Printf("%s\n", string(privStr))
+// }
