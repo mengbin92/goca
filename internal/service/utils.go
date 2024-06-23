@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 
 	pb "github.com/mengbin92/goca/api/goca/v1"
@@ -59,4 +61,26 @@ func (s *CertService) csr(ctx context.Context, req *pb.CSRRequest) (string, erro
 		return "", errors.Wrap(err, "generate csr error")
 	}
 	return csr, nil
+}
+
+func isKeyMatchingCertificate(priv any, cert *x509.Certificate) bool {
+	switch key := priv.(type) {
+	case *rsa.PrivateKey:
+		return key.PublicKey.Equal(cert.PublicKey.(*rsa.PublicKey))
+	case *ecdsa.PrivateKey:
+		return key.PublicKey.Equal(cert.PublicKey.(*rsa.PublicKey))
+	default:
+		return false
+	}
+}
+
+func isKeyMatchingCertificateRequest(privKey any, csr *x509.CertificateRequest) bool {
+	switch key := privKey.(type) {
+	case *rsa.PrivateKey:
+		return key.PublicKey.Equal(csr.PublicKey.(*rsa.PublicKey))
+	case *ecdsa.PrivateKey:
+		return key.PublicKey.Equal(csr.PublicKey.(*rsa.PublicKey))
+	default:
+		return false
+	}
 }

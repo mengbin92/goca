@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/pem"
 	"testing"
 
 	pb "github.com/mengbin92/goca/api/goca/v1"
@@ -10,6 +11,7 @@ import (
 	"github.com/mengbin92/goca/internal/data"
 	"github.com/mengbin92/goca/internal/utils"
 	"github.com/stretchr/testify/assert"
+	"software.sslmate.com/src/go-pkcs12"
 )
 
 func newSelfSign(common string, typ conf.KeyType) (*CertService, error) {
@@ -43,6 +45,20 @@ func newSelfSign(common string, typ conf.KeyType) (*CertService, error) {
 	}
 
 	return NewCertService(useCase, rootCert, nil)
+}
+
+func TestRootCert(t *testing.T) {
+	s, err := newSelfSign("test", conf.KeyType_RSA)
+	assert.Nil(t, err)
+	assert.NotNil(t, s)
+
+	priv, err := s.loadPrivateKey(context.Background(), "test")
+	assert.Nil(t, err)
+
+	cert, err := s.loadCert(context.Background(), "test")
+	assert.Nil(t, err)
+
+	t.Log(isKeyMatchingCertificate(priv, cert))
 }
 
 func TestNewCertService(t *testing.T) {
@@ -225,6 +241,16 @@ func TestCASignCSR(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, s)
 
+	keyReq := &pb.GenKeyRequest{
+		KeyType:  pb.KeyType_RSA,
+		KeySize:  2048,
+		Common:   "123456",
+		Password: "rsapwd",
+	}
+	resp, err := s.GenKey(context.Background(), keyReq)
+	assert.Nil(t, err)
+	assert.NotNil(t, resp)
+
 	csrReq := &pb.CSRRequest{
 		Common:           "123456",
 		Country:          "CN",
@@ -241,11 +267,9 @@ func TestCASignCSR(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, csrResp)
 
-	// parse csr
-	csr, err := utils.LoadCSR(csrResp.Csr)
-	assert.Nil(t, err)
-	assert.NotNil(t, csr)
-	assert.Equal(t, csrReq.Common, csr.Subject.CommonName)
+	priv, _ := utils.PrivatePemToKey(resp.PrivateKey)
+	csr, _ := utils.LoadCSR(csrResp.Csr)
+	t.Logf("isKeyMatchingCertificateRequest: %v\n", isKeyMatchingCertificateRequest(priv, csr))
 
 	certReq := &pb.CASignCSRRequest{
 		Csr:      csrResp.Csr,
@@ -263,6 +287,9 @@ func TestCASignCSR(t *testing.T) {
 
 	assert.Equal(t, "test", cert.Issuer.CommonName)
 	assert.Equal(t, csrReq.Common, cert.Subject.CommonName)
+
+	priv, _ = s.loadPrivateKey(context.Background(), "123456")
+	t.Log(isKeyMatchingCertificate(priv, cert))
 }
 
 func TestRevokeCert(t *testing.T) {
@@ -284,51 +311,44 @@ func TestRevokeCert(t *testing.T) {
 	assert.NotNil(t, crl)
 }
 
-// func TestPKCS12(t *testing.T) {
-// 	s, err := newSelfSign("test", conf.KeyType_RSA)
-// 	assert.Nil(t, err)
-// 	assert.NotNil(t, s)
+func TestPKCS12(t *testing.T) {
+	s, err := newSelfSign("test", conf.KeyType_RSA)
+	assert.Nil(t, err)
+	assert.NotNil(t, s)
 
-// 	req := &pb.PKCS12Request{
-// 		CaCommon: "test",
-// 		GenKeyRequest: &pb.GenKeyRequest{
-// 			KeyType: pb.KeyType_RSA,
-// 			KeySize: 2048,
-// 			Common:  "pkcs12",
-// 		},
-// 		CsrRequest: &pb.CSRRequest{
-// 			Common:           "pkcs12",
-// 			Province:         "Beijing",
-// 			Locality:         "haidian",
-// 			Organization:     "test",
-// 			OrganizationUnit: "test01",
-// 			Email:            "123@qq.com",
-// 			Dns:              []string{"test.com"},
-// 			Ip:               []string{"123.123.123.123"},
-// 		},
-// 		Days: 365,
-// 	}
+	req := &pb.PKCS12Request{
+		CaCommon: "test",
+		GenKeyRequest: &pb.GenKeyRequest{
+			KeyType: pb.KeyType_RSA,
+			KeySize: 2048,
+			Common:  "pkcs12",
+		},
+		CsrRequest: &pb.CSRRequest{
+			Common:           "pkcs12",
+			Province:         "Beijing",
+			Locality:         "haidian",
+			Organization:     "test",
+			OrganizationUnit: "test01",
+			Email:            "123@qq.com",
+			Dns:              []string{"test.com"},
+			Ip:               []string{"123.123.123.123"},
+		},
+		Days: 365,
+	}
 
-// 	resp, err := s.PKCS12(context.Background(), req)
-// 	assert.Nil(t, err)
-// 	assert.NotNil(t, resp)
+	resp, err := s.PKCS12(context.Background(), req)
+	assert.Nil(t, err)
+	assert.NotNil(t, resp)
 
-// 	pkfBlock, _ := pem.Decode([]byte(resp.Pkcs12))
-// 	if pkfBlock == nil {
-// 		t.Fatal("decode csr failed")
-// 	}
-// 	priv, cert, caCerts, err := pkcs12.DecodeChain(pkfBlock.Bytes, req.GenKeyRequest.Password)
-// 	assert.Nil(t, err)
-// 	assert.NotNil(t, priv)
-// 	assert.NotNil(t, cert)
-// 	assert.NotNil(t, caCerts)
+	pkfBlock, _ := pem.Decode([]byte(resp.Pkcs12))
+	if pkfBlock == nil {
+		t.Fatal("decode csr failed")
+	}
+	priv, cert, caCerts, err := pkcs12.DecodeChain(pkfBlock.Bytes, req.GenKeyRequest.Password)
+	assert.Nil(t, err)
+	assert.NotNil(t, priv)
+	assert.NotNil(t, cert)
+	assert.NotNil(t, caCerts)
 
-// 	// privStr,_ := utils.PrivateToPEM(priv)
-// 	// certByte := pem.EncodeToMemory(&pem.Block{
-// 	// 	Type:  "CERTIFICATE",
-// 	// 	Bytes: cert.Raw,
-// 	// })
-
-// 	// fmt.Printf("%s\n", string(certByte))
-// 	// fmt.Printf("%s\n", string(privStr))
-// }
+	assert.True(t, isKeyMatchingCertificate(priv, cert))
+}

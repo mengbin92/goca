@@ -103,6 +103,15 @@ func GenerateCSR(private any, req *pb.CSRRequest) (string, error) {
 		return "", errors.Wrap(err, "create rsa csr failed")
 	}
 
+	csr, err := x509.ParseCertificateRequest(csrBytes)
+	if err != nil {
+		return "", errors.Wrap(err, "parse csr failed")
+	}
+	err = csr.CheckSignature()
+	if err != nil {
+		return "", errors.Wrap(err, "check csr signature failed")
+	}
+
 	csrPem := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE REQUEST",
 		Bytes: csrBytes,
@@ -123,6 +132,10 @@ func LoadCSR(csr string) (*x509.CertificateRequest, error) {
 	csrTemplate, err := x509.ParseCertificateRequest(csrBlock.Bytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse csr failed")
+	}
+	err = csrTemplate.CheckSignature()
+	if err != nil {
+		return nil, errors.Wrap(err, "check csr signature failed")
 	}
 	return csrTemplate, nil
 }
@@ -190,7 +203,7 @@ func GenerateRootCert(priv any, config *conf.RootCert) (string, string, error) {
 			Locality:           []string{config.Locality},
 		},
 		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
 		EmailAddresses:        []string{config.Email},
 		DNSNames:              config.Dns,
 		IPAddresses:           netIPs,
@@ -264,21 +277,12 @@ func SignCert(priv any, parent *x509.Certificate, csr *x509.CertificateRequest, 
 		KeyUsage:       x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 	}
 	// 生成Subject Key Identifier
-	var publicKey any
-	switch key := priv.(type) {
-	case *rsa.PrivateKey:
-		publicKey = &key.PublicKey
-	case *ecdsa.PrivateKey:
-		publicKey = &key.PublicKey
-	default:
-		return "", nil, errors.New("invalid private key type")
-	}
-	ski, err := generateSubjectKeyIdentifier(publicKey)
+	ski, err := generateSubjectKeyIdentifier(csr.PublicKey)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "generate subject key identifier failed")
 	}
 	certTemp.SubjectKeyId = ski
-	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, parent, publicKey, priv)
+	certBytes, err := x509.CreateCertificate(rand.Reader, &certTemp, parent, csr.PublicKey, priv)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "create cert failed")
 	}
