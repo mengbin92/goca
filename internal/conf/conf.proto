@@ -9,6 +9,7 @@ message Bootstrap {
   Server server = 1;
   Data data = 2;
   RootCert root = 3;
+  Log log = 4;
 }
 
 message Server {
@@ -78,4 +79,12 @@ message KeyPair {
   int32 key_size = 2;
   string password = 3;
   string common = 4;
+}
+
+message Log {
+  // 日志级别设置
+  // 支持debug(-1)、info(0)、warn(1)、error(2)、dpanic(3)、panic(4)、fatal(5)
+  int32 level = 1;
+  // 日志输出格式，支持json or console
+  string format = 2;
 }

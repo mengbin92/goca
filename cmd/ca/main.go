@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/mengbin92/goca/internal/conf"
+	"github.com/mengbin92/goca/internal/logger"
 
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/config"
@@ -20,9 +21,9 @@ import (
 // go build -ldflags "-X main.Version=x.y.z"
 var (
 	// Name is the name of the compiled software.
-	Name string
+	Name = "goca"
 	// Version is the version of the compiled software.
-	Version string
+	Version = "v0.1.0"
 	// flagconf is the config flag.
 	flagconf string
 
@@ -49,15 +50,6 @@ func newApp(logger log.Logger, gs *grpc.Server, hs *http.Server) *kratos.App {
 
 func main() {
 	flag.Parse()
-	logger := log.With(log.NewStdLogger(os.Stdout),
-		"ts", log.DefaultTimestamp,
-		"caller", log.DefaultCaller,
-		"service.id", id,
-		"service.name", Name,
-		"service.version", Version,
-		"trace.id", tracing.TraceID(),
-		"span.id", tracing.SpanID(),
-	)
 	c := config.New(
 		config.WithSource(
 			file.NewSource(flagconf),
@@ -73,8 +65,16 @@ func main() {
 	if err := c.Scan(&bc); err != nil {
 		panic(err)
 	}
-
-	app, cleanup, err := wireApp(bc.Server, bc.Data, bc.Root,logger)
+	localLog := log.With(logger.NewZapLogger(bc.Log),
+		"ts", log.DefaultTimestamp,
+		"caller", log.DefaultCaller,
+		"service.id", id,
+		"service.name", Name,
+		"service.version", Version,
+		"trace.id", tracing.TraceID(),
+		"span.id", tracing.SpanID(),
+	)
+	app, cleanup, err := wireApp(bc.Server, bc.Data, bc.Root, localLog)
 	if err != nil {
 		panic(err)
 	}

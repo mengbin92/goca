@@ -41,24 +41,24 @@ func (r *caRepo) GetPrivateKey(ctx context.Context, common string) (string, erro
 }
 
 func (r *caRepo) SavePrivateKey(ctx context.Context, common, privateKey string) error {
-	exist, err := r.isExists(ctx, fmt.Sprintf("private-%s", common))
-	if err != nil {
-		return err
-	}
-	if exist {
-		return fmt.Errorf("key: private-%s exists", common)
-	}
+	// exist, err := r.isExists(ctx, fmt.Sprintf("private-%s", common))
+	// if err != nil {
+	// 	return err
+	// }
+	// if exist {
+	// 	return fmt.Errorf("key: private-%s exists", common)
+	// }
 	return r.data.rdb.Set(ctx, fmt.Sprintf("private-%s", common), privateKey, 0).Err()
 }
 
 func (r *caRepo) SaveCert(ctx context.Context, common, cert string) error {
-	exist, err := r.isExists(ctx, fmt.Sprintf("cert-%s", common))
-	if err != nil {
-		return err
-	}
-	if exist {
-		return fmt.Errorf("key: cert-%s exists", common)
-	}
+	// exist, err := r.isExists(ctx, fmt.Sprintf("cert-%s", common))
+	// if err != nil {
+	// 	return err
+	// }
+	// if exist {
+	// 	return fmt.Errorf("key: cert-%s exists", common)
+	// }
 	return r.data.rdb.Set(ctx, fmt.Sprintf("cert-%s", common), cert, 0).Err()
 }
 
@@ -79,12 +79,12 @@ func (r *caRepo) GetRootCert(ctx context.Context, common string) (string, error)
 }
 
 func (r *caRepo) SaveRootCert(ctx context.Context, common, cert string) error {
-	exist, err := r.isExists(ctx, fmt.Sprintf("root-%s", common))
-	if err != nil {
-		return err
-	}
-	if exist {
-		return fmt.Errorf("key: root-%s exists", common)
-	}
+	// exist, err := r.isExists(ctx, fmt.Sprintf("root-%s", common))
+	// if err != nil {
+	// 	return err
+	// }
+	// if exist {
+	// 	return fmt.Errorf("key: root-%s exists", common)
+	// }
 	return r.data.rdb.Set(ctx, fmt.Sprintf("root-%s", common), cert, 0).Err()
 }

@@ -33,3 +33,9 @@ root:
     key_size: 2048
     password: "1234567890"
     common: rootca
+
+log:
+  # 支持debug(-1)、info(0)、warn(1)、error(2)、dpanic(3)、panic(4)、fatal(5)
+  level: 0
+  # json or console
+  format: console

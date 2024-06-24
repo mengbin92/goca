@@ -11,20 +11,40 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (s *CertService) loadCert(ctx context.Context, common string) (*x509.Certificate, error) {
-	caCertStr, err := s.repo.GetCert(ctx, common)
-	if err != nil {
-		return nil, err
-	}
-	return utils.LoadCert(caCertStr)
-}
+// func (s *CertService) loadCert(ctx context.Context, common string) (*x509.Certificate, error) {
+// 	caCertStr, err := s.repo.GetCert(ctx, common)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return utils.LoadCert(caCertStr)
+// }
 
-func (s *CertService) loadPrivateKey(ctx context.Context, common string) (any, error) {
+// func (s *CertService) loadPrivateKey(ctx context.Context, common string) (any, error) {
+// 	privateKeyStr, err := s.repo.GetPrivateKey(ctx, common)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return utils.PrivatePemToKey(privateKeyStr)
+// }
+
+func (s *CertService) loadCA(ctx context.Context, common string) (*x509.Certificate, any, error) {
+	caCertStr, err := s.repo.GetRootCert(ctx, common)
+	if err != nil {
+		return nil, nil, err
+	}
+	cert, err := utils.LoadCert(caCertStr)
+	if err != nil {
+		return nil, nil, err
+	}
 	privateKeyStr, err := s.repo.GetPrivateKey(ctx, common)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return utils.PrivatePemToKey(privateKeyStr)
+	private, err := utils.PrivatePemToKey(privateKeyStr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cert, private, nil
 }
 
 func (s *CertService) generateKey(ctx context.Context, req *pb.GenKeyRequest) (string, error) {

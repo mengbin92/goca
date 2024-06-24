@@ -5,10 +5,12 @@ import (
 	"encoding/pem"
 	"testing"
 
+	"github.com/go-kratos/kratos/v2/log"
 	pb "github.com/mengbin92/goca/api/goca/v1"
 	"github.com/mengbin92/goca/internal/biz"
 	"github.com/mengbin92/goca/internal/conf"
 	"github.com/mengbin92/goca/internal/data"
+	"github.com/mengbin92/goca/internal/logger"
 	"github.com/mengbin92/goca/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"software.sslmate.com/src/go-pkcs12"
@@ -43,8 +45,13 @@ func newSelfSign(common string, typ conf.KeyType) (*CertService, error) {
 			Password: "passowd",
 		},
 	}
-
-	return NewCertService(useCase, rootCert, nil)
+	localLog := log.With(logger.NewZapLogger(&conf.Log{Level: 0, Format: "console"}),
+		"ts", log.DefaultTimestamp,
+		"caller", log.DefaultCaller,
+		"service.name", "goca-test",
+		"service.version", "v0.0.1",
+	)
+	return NewCertService(useCase, rootCert, localLog)
 }
 
 func TestRootCert(t *testing.T) {
@@ -52,10 +59,7 @@ func TestRootCert(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, s)
 
-	priv, err := s.loadPrivateKey(context.Background(), "test")
-	assert.Nil(t, err)
-
-	cert, err := s.loadCert(context.Background(), "test")
+	cert, priv, err := s.loadCA(context.Background(), "test")
 	assert.Nil(t, err)
 
 	t.Log(isKeyMatchingCertificate(priv, cert))
@@ -288,7 +292,7 @@ func TestCASignCSR(t *testing.T) {
 	assert.Equal(t, "test", cert.Issuer.CommonName)
 	assert.Equal(t, csrReq.Common, cert.Subject.CommonName)
 
-	priv, _ = s.loadPrivateKey(context.Background(), "123456")
+	priv, _ = s.repo.GetPrivateKey(context.Background(), "123456")
 	t.Log(isKeyMatchingCertificate(priv, cert))
 }
 
