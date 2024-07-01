@@ -130,7 +130,7 @@ func (s *CertService) GetCert(ctx context.Context, req *pb.CertRequest) (*pb.Cer
 }
 func (s *CertService) CASignCSR(ctx context.Context, req *pb.CASignCSRRequest) (*pb.CASignCSRResponse, error) {
 	// load parent ca private key and certificate
-	caCert, caPrivateKey, err := s.loadCA(ctx, req.CaCommon)
+	caCert, caPrivateKey, err := s.loadCertAndPrivate(ctx, req.CaCommon)
 	if err != nil {
 		s.log.Errorf("load parent ca error: %s", err.Error())
 		return nil, errors.Wrap(err, "load parent ca error")
@@ -197,7 +197,7 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	revokeds = append(revokeds, newRevoked)
 
 	// load parent ca private key and certificate
-	caCert, caPrivateKey, err := s.loadCA(ctx, req.CaCommon)
+	caCert, caPrivateKey, err := s.loadCertAndPrivate(ctx, req.CaCommon)
 	if err != nil {
 		s.log.Errorf("load parent ca error: %s", err.Error())
 		return nil, errors.Wrap(err, "load parent ca error")
@@ -232,7 +232,7 @@ func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PK
 	var cert *x509.Certificate
 
 	// load parent ca private key and certificate
-	caCert, caPrivateKey, err := s.loadCA(ctx, req.CaCommon)
+	caCert, caPrivateKey, err := s.loadCertAndPrivate(ctx, req.CaCommon)
 	if err != nil {
 		s.log.Errorf("load parent ca error: %s", err.Error())
 		return nil, errors.Wrap(err, "load parent ca error")
@@ -243,9 +243,9 @@ func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PK
 			s.log.Errorf("password is empty while get PKCS#12")
 			return nil, errors.New("password is empty while get PKCS#12")
 		}
-		cert, newPrivateKey, err = s.loadCA(ctx, req.GenKeyRequest.Common)
+		cert, newPrivateKey, err = s.loadCertAndPrivate(ctx, req.GenKeyRequest.Common)
 		if err != nil {
-			s.log.Errorf("load Certificate error: %s", err.Error())
+			s.log.Errorf("load Certificate: %s error: %s", req.GenKeyRequest.Common, err.Error())
 			return nil, errors.Wrap(err, "load Certificate error")
 		}
 	} else if req.Operate == pb.PKCS12Request_CREATE {

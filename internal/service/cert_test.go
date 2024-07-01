@@ -59,7 +59,7 @@ func TestRootCert(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, s)
 
-	cert, priv, err := s.loadCA(context.Background(), "test")
+	cert, priv, err := s.loadCertAndPrivate(context.Background(), "test")
 	assert.Nil(t, err)
 
 	t.Log(isKeyMatchingCertificate(priv, cert))
@@ -323,9 +323,10 @@ func TestPKCS12(t *testing.T) {
 	req := &pb.PKCS12Request{
 		CaCommon: "test",
 		GenKeyRequest: &pb.GenKeyRequest{
-			KeyType: pb.KeyType_RSA,
-			KeySize: 2048,
-			Common:  "pkcs12",
+			KeyType:  pb.KeyType_RSA,
+			KeySize:  2048,
+			Common:   "pkcs12",
+			Password: "pkcs12pwd",
 		},
 		CsrRequest: &pb.CSRRequest{
 			Common:           "pkcs12",
@@ -340,19 +341,61 @@ func TestPKCS12(t *testing.T) {
 		Days: 365,
 	}
 
-	resp, err := s.PKCS12(context.Background(), req)
-	assert.Nil(t, err)
-	assert.NotNil(t, resp)
-
-	pkfBlock, _ := pem.Decode([]byte(resp.Pkcs12))
-	if pkfBlock == nil {
-		t.Fatal("decode csr failed")
+	tests := []struct {
+		name    string
+		req     *pb.PKCS12Request
+		isExist bool
+	}{
+		{
+			name:    "pkcs12 not exist",
+			req:     req,
+			isExist: false,
+		},
+		{
+			name:    "pkcs12 exist",
+			req:     req,
+			isExist: true,
+		},
 	}
-	priv, cert, caCerts, err := pkcs12.DecodeChain(pkfBlock.Bytes, req.GenKeyRequest.Password)
-	assert.Nil(t, err)
-	assert.NotNil(t, priv)
-	assert.NotNil(t, cert)
-	assert.NotNil(t, caCerts)
 
-	assert.True(t, isKeyMatchingCertificate(priv, cert))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.isExist {
+				tt.req.Operate = pb.PKCS12Request_GET
+				resp, err := s.PKCS12(context.Background(), req)
+				assert.Nil(t, err)
+				assert.NotNil(t, resp)
+
+				pkfBlock, _ := pem.Decode([]byte(resp.Pkcs12))
+				if pkfBlock == nil {
+					t.Fatal("decode csr failed")
+				}
+				priv, cert, caCerts, err := pkcs12.DecodeChain(pkfBlock.Bytes, req.GenKeyRequest.Password)
+				assert.Nil(t, err)
+				assert.NotNil(t, priv)
+				assert.NotNil(t, cert)
+				assert.NotNil(t, caCerts)
+
+				assert.True(t, isKeyMatchingCertificate(priv, cert))
+			} else {
+				tt.req.Operate = pb.PKCS12Request_CREATE
+				resp, err := s.PKCS12(context.Background(), req)
+				assert.Nil(t, err)
+				assert.NotNil(t, resp)
+
+				pkfBlock, _ := pem.Decode([]byte(resp.Pkcs12))
+				if pkfBlock == nil {
+					t.Fatal("decode csr failed")
+				}
+				priv, cert, caCerts, err := pkcs12.DecodeChain(pkfBlock.Bytes, req.GenKeyRequest.Password)
+				assert.Nil(t, err)
+				assert.NotNil(t, priv)
+				assert.NotNil(t, cert)
+				assert.NotNil(t, caCerts)
+
+				assert.True(t, isKeyMatchingCertificate(priv, cert))
+			}
+		})
+	}
+
 }

@@ -27,8 +27,8 @@ import (
 // 	return utils.PrivatePemToKey(privateKeyStr)
 // }
 
-func (s *CertService) loadCA(ctx context.Context, common string) (*x509.Certificate, any, error) {
-	caCertStr, err := s.repo.GetRootCert(ctx, common)
+func (s *CertService) loadCertAndPrivate(ctx context.Context, common string) (*x509.Certificate, any, error) {
+	caCertStr, err := s.repo.GetCert(ctx, common)
 	if err != nil {
 		return nil, nil, err
 	}
