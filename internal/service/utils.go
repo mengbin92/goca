@@ -56,7 +56,16 @@ func (s *CertService) generateKey(ctx context.Context, req *pb.GenKeyRequest) (s
 	if err != nil {
 		return "", errors.Wrap(err, "private key to pem error")
 	}
-	if err := s.repo.SavePrivateKey(ctx, req.Common, privStr); err != nil {
+
+	// if req.Password == "" {
+	// 	return "", errors.New("password is empty")
+	// }
+	// encryptPrivStr, err := utils.TripleDESEncrypt([]byte(privStr), []byte(req.Password))
+	// if err != nil {
+	// 	return "", errors.Wrap(err, "encrypt private key error")
+	// }
+
+	if err := s.repo.SavePrivateKey(ctx, req.Common, string(privStr)); err != nil {
 		return "", errors.Wrap(err, "save private key error")
 	}
 	return privStr, nil

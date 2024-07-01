@@ -83,6 +83,13 @@ message PKCS12Request {
   GenKeyRequest gen_key_request = 2;
   CSRRequest csr_request = 3;
   int32 days = 4;
+
+  enum Operate {
+    CREATE = 0;
+    GET = 1;
+    INVALID = 2;
+  }
+  Operate operate = 5;
 }
 
 message PKCS12Response { string pkcs12 = 1; }
@@ -117,12 +124,14 @@ service Cert {
       post : "/v1/cert/revokecert",
       body : "*",
     };
-  
   }
   rpc PKCS12(PKCS12Request) returns (PKCS12Response) {
     option (google.api.http) = {
       post : "/v1/cert/pkcs12",
-      body : "*"
+      body : "*",
+      additional_bindings : {
+        get : "/v1/cert/pkcs12/{ca_common}/{operate}/{gen_key_request.common}"
+      }
     };
   }
 }

@@ -175,7 +175,7 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse crl error")
 	}
-	
+
 	if crl != nil {
 		s.log.Debugf("get RevokedCertificateEntries: %d", len(crl.RevokedCertificateEntries))
 		for _, entry := range crl.RevokedCertificateEntries {
@@ -227,6 +227,10 @@ func (s *CertService) RevokeCert(ctx context.Context, req *pb.RevokeCertRequest)
 	}, nil
 }
 func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PKCS12Response, error) {
+	var newPrivateKey any
+	var err error
+	var cert *x509.Certificate
+
 	// load parent ca private key and certificate
 	caCert, caPrivateKey, err := s.loadCA(ctx, req.CaCommon)
 	if err != nil {
@@ -234,49 +238,64 @@ func (s *CertService) PKCS12(ctx context.Context, req *pb.PKCS12Request) (*pb.PK
 		return nil, errors.Wrap(err, "load parent ca error")
 	}
 
-	// new keys with request
-	newPrivateStr, err := s.generateKey(ctx, req.GenKeyRequest)
-	if err != nil {
-		s.log.Errorf("generateKey error while generate PKCS12 error: %s",err.Error())
-		return nil, errors.Wrap(err, "generateKey error while generate PKCS12")
-	}
-	newPrivateKey, err := utils.PrivatePemToKey(newPrivateStr)
-	if err != nil {
-		s.log.Errorf("parse pem private key error while generate PKCS12 error: %s",err.Error())
-		return nil, errors.Wrap(err, "parse pem private key error while generate PKCS12")
-	}
+	if req.Operate == pb.PKCS12Request_GET {
+		if req.GenKeyRequest.Password == "" {
+			s.log.Errorf("password is empty while get PKCS#12")
+			return nil, errors.New("password is empty while get PKCS#12")
+		}
+		cert, newPrivateKey, err = s.loadCA(ctx, req.GenKeyRequest.Common)
+		if err != nil {
+			s.log.Errorf("load Certificate error: %s", err.Error())
+			return nil, errors.Wrap(err, "load Certificate error")
+		}
+	} else if req.Operate == pb.PKCS12Request_CREATE {
+		// new keys with request
+		newPrivateStr, err := s.generateKey(ctx, req.GenKeyRequest)
+		if err != nil {
+			s.log.Errorf("generateKey error while generate PKCS12 error: %s", err.Error())
+			return nil, errors.Wrap(err, "generateKey error while generate PKCS12")
+		}
+		newPrivateKey, err = utils.PrivatePemToKey(newPrivateStr)
+		if err != nil {
+			s.log.Errorf("parse pem private key error while generate PKCS12 error: %s", err.Error())
+			return nil, errors.Wrap(err, "parse pem private key error while generate PKCS12")
+		}
 
-	// new csr
-	csrStr, err := s.csr(ctx, req.CsrRequest)
-	if err != nil {
-		s.log.Errorf("csr error while generate PKCS12 error: %s",err.Error())
-		return nil, errors.Wrap(err, "generate csr error")
-	}
-	csr, err := utils.LoadCSR(csrStr)
-	if err != nil {
-		s.log.Errorf("load csr error while generate PKCS12 error: %s",err.Error())
-		return nil, errors.Wrap(err, "load csr error")
-	}
+		// new csr
+		csrStr, err := s.csr(ctx, req.CsrRequest)
+		if err != nil {
+			s.log.Errorf("csr error while generate PKCS12 error: %s", err.Error())
+			return nil, errors.Wrap(err, "generate csr error")
+		}
+		csr, err := utils.LoadCSR(csrStr)
+		if err != nil {
+			s.log.Errorf("load csr error while generate PKCS12 error: %s", err.Error())
+			return nil, errors.Wrap(err, "load csr error")
+		}
 
-	certStr, _, err := utils.SignCert(caPrivateKey, caCert, csr, int(req.Days))
-	if err != nil {
-		s.log.Errorf("ca sign csr error while generate PKCS12 error: %s",err.Error())
-		return nil, errors.Wrap(err, "ca sign csr error")
-	}
-	// save to local
-	if err := s.repo.SaveCert(ctx, req.GenKeyRequest.Common, certStr); err != nil {
-		s.log.Errorf("save cert error while generate PKCS12 error: %s",err.Error())
-		return nil, errors.Wrap(err, "save cert error")
-	}
-	cert, err := utils.LoadCert(certStr)
-	if err != nil {
-		s.log.Errorf("load cert error while generate PKCS12 error: %s",err.Error())
-		return nil, errors.Wrap(err, "load cert error")
+		certStr, _, err := utils.SignCert(caPrivateKey, caCert, csr, int(req.Days))
+		if err != nil {
+			s.log.Errorf("ca sign csr error while generate PKCS12 error: %s", err.Error())
+			return nil, errors.Wrap(err, "ca sign csr error")
+		}
+		// save to local
+		if err := s.repo.SaveCert(ctx, req.GenKeyRequest.Common, certStr); err != nil {
+			s.log.Errorf("save cert error while generate PKCS12 error: %s", err.Error())
+			return nil, errors.Wrap(err, "save cert error")
+		}
+		cert, err = utils.LoadCert(certStr)
+		if err != nil {
+			s.log.Errorf("load cert error while generate PKCS12 error: %s", err.Error())
+			return nil, errors.Wrap(err, "load cert error")
+		}
+	} else {
+		s.log.Errorf("invalid PKCS#12 operate: %v", req.Operate)
+		return nil, errors.New("invalid operate")
 	}
 
 	pkfDate, err := pkcs12.Legacy.Encode(newPrivateKey, cert, []*x509.Certificate{caCert}, req.GenKeyRequest.Password)
 	if err != nil {
-		s.log.Errorf("encode pkcs12 error while generate PKCS12 error: %s",err.Error())
+		s.log.Errorf("encode pkcs12 error while generate PKCS12 error: %s", err.Error())
 		return nil, errors.Wrap(err, "encode pkcs12 error")
 	}
 

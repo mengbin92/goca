@@ -1,7 +1,10 @@
 package utils
 
 import (
+	"bytes"
 	"crypto"
+	"crypto/cipher"
+	"crypto/des"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -167,17 +170,6 @@ func toCryptoSigner(priv any) (crypto.Signer, error) {
 	}
 }
 
-func getPublicKey(priv any) (any, error) {
-	switch key := priv.(type) {
-	case *rsa.PrivateKey:
-		return key.PublicKey, nil
-	case *ecdsa.PrivateKey:
-		return key.PublicKey, nil
-	default:
-		return nil, errors.New("unsupported private key type")
-	}
-}
-
 // 生成根证书和CRL
 func GenerateRootCert(priv any, config *conf.RootCert) (string, string, error) {
 	// 生成证书编号
@@ -318,4 +310,45 @@ func generateSubjectKeyIdentifier(pubKey any) ([]byte, error) {
 	}
 	ski := sha1.Sum(pubKeyASN1)
 	return ski[:], nil
+}
+
+// PKCS5Padding 填充
+func PKCS5Padding(ciphertext []byte, blockSize int) []byte {
+	padding := blockSize - len(ciphertext)%blockSize
+	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
+	return append(ciphertext, padtext...)
+}
+
+// PKCS5UnPadding 去填充
+func PKCS5UnPadding(origData []byte) []byte {
+	length := len(origData)
+	unpadding := int(origData[length-1])
+	return origData[:(length - unpadding)]
+}
+
+// 3DES加密
+func TripleDESEncrypt(origData, key []byte) ([]byte, error) {
+	block, err := des.NewTripleDESCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	blockSize := block.BlockSize()
+	origData = PKCS5Padding(origData, blockSize)
+	blockMode := cipher.NewCBCEncrypter(block, key[:blockSize])
+	crypted := make([]byte, len(origData))
+	blockMode.CryptBlocks(crypted, origData)
+	return crypted, nil
+}
+
+// 3DES解密
+func TripleDESDecrypt(crypted, key []byte) ([]byte, error) {
+	block, err := des.NewTripleDESCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	blockMode := cipher.NewCBCDecrypter(block, key[:block.BlockSize()])
+	origData := make([]byte, len(crypted))
+	blockMode.CryptBlocks(origData, crypted)
+	origData = PKCS5UnPadding(origData)
+	return origData, nil
 }

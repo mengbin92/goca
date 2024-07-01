@@ -78,6 +78,106 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/goca.v1.PKCS12Response'
+    /v1/cert/pkcs12/{caCommon}/{operate}/{gen_key_request.common}:
+        get:
+            tags:
+                - Cert
+            operationId: Cert_PKCS12
+            parameters:
+                - name: caCommon
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: operate
+                  in: path
+                  required: true
+                  schema:
+                    type: integer
+                    format: enum
+                - name: gen_key_request.common
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+                - name: genKeyRequest.keyType
+                  in: query
+                  schema:
+                    type: integer
+                    format: enum
+                - name: genKeyRequest.keySize
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+                - name: genKeyRequest.password
+                  in: query
+                  schema:
+                    type: string
+                - name: genKeyRequest.common
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.common
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.country
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.province
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.locality
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.organization
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.organizationUnit
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.email
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.dns
+                  in: query
+                  schema:
+                    type: array
+                    items:
+                        type: string
+                - name: csrRequest.ip
+                  in: query
+                  schema:
+                    type: array
+                    items:
+                        type: string
+                - name: csrRequest.password
+                  in: query
+                  schema:
+                    type: string
+                - name: csrRequest.caCommon
+                  in: query
+                  schema:
+                    type: string
+                - name: days
+                  in: query
+                  schema:
+                    type: integer
+                    format: int32
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/goca.v1.PKCS12Response'
     /v1/cert/revokecert:
         post:
             tags:
@@ -220,6 +320,9 @@ components:
                 days:
                     type: integer
                     format: int32
+                operate:
+                    type: integer
+                    format: enum
         goca.v1.PKCS12Response:
             type: object
             properties:
